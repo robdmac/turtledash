@@ -793,7 +793,10 @@
         if (this.currentTurtleLevel >= 4) {
           // Award a coin for winning
           const newCoinTotal = addCoins(1);
-          this.showMessage("CONGRATULATIONS!\nYou have reached your final form!\nYOU WIN!\n\n+1 Coin!\n\nPress SPACE to play again", '#00ff00', false);
+          const winMessage = this.isMobile ? 
+            "CONGRATULATIONS!\nYou have reached your final form!\nYOU WIN!\n\n+1 Coin!" : 
+            "CONGRATULATIONS!\nYou have reached your final form!\nYOU WIN!\n\n+1 Coin!\n\nPress SPACE to play again";
+          this.showMessage(winMessage, '#00ff00', false);
           
           // Update coin display
           if (this.coinText) {
@@ -816,6 +819,35 @@
             }
           });
           this.physics.pause();
+          
+          // Add play again button for mobile
+          if (this.isMobile) {
+            const playAgainButton = this.add.rectangle(
+              this.cameras.main.centerX,
+              this.cameras.main.centerY + 120,
+              200,
+              60,
+              0x00ff00
+            );
+            playAgainButton.setInteractive();
+            
+            const playAgainText = this.add.text(
+              this.cameras.main.centerX,
+              this.cameras.main.centerY + 120,
+              'PLAY AGAIN',
+              {
+                fontSize: '24px',
+                fill: '#ffffff',
+                fontStyle: 'bold'
+              }
+            );
+            playAgainText.setOrigin(0.5);
+            
+            playAgainButton.on('pointerdown', () => {
+              this.resetGameState();
+              this.scene.start('CharacterSelect');
+            });
+          }
           
           // Add restart handler
           this.input.keyboard.once('keydown-SPACE', () => {
@@ -1492,10 +1524,42 @@
               this.shieldCountdownText.setText('');
           }
 
-          this.showMessage('GAME OVER - Shark got you!\nPress SPACE to restart', '#ff0000', false);
+          const gameOverMessage = this.isMobile ? 
+            'GAME OVER - Shark got you!' : 
+            'GAME OVER - Shark got you!\nPress SPACE to restart';
+          this.showMessage(gameOverMessage, '#ff0000', false);
           shark.setTexture('shark_attack');
           shark.setFlipX(shark.body.velocity.x > 0);
           this.physics.pause();
+          
+          // Add restart button for mobile
+          if (this.isMobile) {
+            const restartButton = this.add.rectangle(
+              this.cameras.main.centerX,
+              this.cameras.main.centerY + 80,
+              200,
+              60,
+              0x00ff00
+            );
+            restartButton.setInteractive();
+            
+            const restartText = this.add.text(
+              this.cameras.main.centerX,
+              this.cameras.main.centerY + 80,
+              'RESTART',
+              {
+                fontSize: '28px',
+                fill: '#ffffff',
+                fontStyle: 'bold'
+              }
+            );
+            restartText.setOrigin(0.5);
+            
+            restartButton.on('pointerdown', () => {
+              this.resetGameState();
+              this.scene.restart();
+            });
+          }
           
           this.input.keyboard.once('keydown-SPACE', () => {
               this.resetGameState();
