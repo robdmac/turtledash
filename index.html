@@ -1,0 +1,1723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coral Reef Adventure</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #000000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+  <script>
+    const DEBUG_MODE = false;
+    const INITIAL_SHARKS = 8;
+    const SHARKS_PER_LEVEL = 4;
+    const INITIAL_SHARK_SPEED = 100;
+    const SPEED_INCREASE_PER_LEVEL = 25;
+    const SHARK_RETREAT_SPEED = 800;
+    const SHIELD_RESPAWN_TIME = 3000;
+    const BUBBLE_SHOT_SPEED = 400;
+    const BUBBLE_SHOT_DISTANCE = 300;
+    const BUBBLE_SHOT_SCALE = 0.2;
+    const BUBBLE_COOLDOWN = 2000; // 2 seconds in milliseconds
+    const SHOCKWAVE_MAX_SCALE = 2;
+    const SHOCKWAVE_DURATION = 500;
+    const SHOCKWAVE_COOLDOWN = 5000;
+    const SHOCKWAVE_PUSH_FORCE = 500;
+    const SHOCKWAVE_RANGE = 250;
+    const SHARK_RESET_TIME = 2000;
+    const OCTOPUS_SPEED = 150;
+    const OCTOPUS_COUNT = 3;
+    const INK_SPLAT_DURATION = 3000;
+    const INK_SPLAT_SCALE = 2;
+
+    function launchConfetti(duration = 5000) {
+          const end = Date.now() + duration;
+          
+          // trick: repeat bursts of confetti until 'duration' has passed
+          const interval = setInterval(() => {
+            // stop if time is up
+            if (Date.now() > end) {
+              clearInterval(interval);
+              return;
+            }
+
+            // Shoot confetti from a random location on the screen
+            confetti({
+              startVelocity: 30,
+              spread: 360,
+              ticks: 60,
+              origin: {
+                x: Math.random(), // 0 to 1
+                y: Math.random() - 0.2 // slightly up so they fall down
+              }
+            });
+          }, 200); // every 200ms
+    }
+
+    // Coin management functions
+    function getCoins() {
+      const coins = localStorage.getItem('coralReefCoins');
+      return coins ? parseInt(coins) : 0;
+    }
+
+    function setCoins(amount) {
+      localStorage.setItem('coralReefCoins', amount.toString());
+    }
+
+    function addCoins(amount) {
+      const current = getCoins();
+      setCoins(current + amount);
+      return current + amount;
+    }
+
+    class TitleScreen extends Phaser.Scene {
+      constructor() {
+        super('TitleScreen');
+      }
+      
+      preload() {
+        this.load.image('title_screen', 'title_screen.png');
+        
+        // Load jingle audio files
+        this.load.audio('jingle_1', 'jingle_1.mp3');
+        this.load.audio('jingle_2', 'jingle_2.mp3');
+        this.load.audio('jingle_3', 'jingle_3.mp3');
+        this.load.audio('jingle_4', 'jingle_4.mp3');
+      }
+      
+      create() {
+        const titleImage = this.add.image(this.cameras.main.centerX, this.cameras.main.centerY, 'title_screen');
+        
+        const scaleX = this.cameras.main.width / titleImage.width;
+        const scaleY = this.cameras.main.height / titleImage.height;
+        const scale = Math.min(scaleX, scaleY);
+        titleImage.setScale(scale);
+        
+        // Prepare jingle but don't play yet
+        const jingleNumber = Phaser.Math.Between(1, 4);
+        const jingle = this.sound.add(`jingle_${jingleNumber}`, { volume: 0.5 });
+        
+        // Flag to track if jingle has played
+        let jinglePlayed = false;
+        
+        const continueText = this.add.text(this.cameras.main.centerX, this.cameras.main.height - 100, 'Click or Tap to Continue', {
+          fontSize: '36px',
+          fill: '#ffffff',
+          fontStyle: 'bold',
+          backgroundColor: '#00000080',
+          padding: { x: 20, y: 10 },
+        }).setOrigin(0.5);
+        
+        this.tweens.add({
+          targets: continueText,
+          alpha: 0.3,
+          duration: 1000,
+          yoyo: true,
+          repeat: -1
+        });
+        
+        this.input.once('pointerdown', () => {
+          if (!jinglePlayed) {
+            jingle.play();
+            jinglePlayed = true;
+          }
+          this.scene.start('CharacterSelect');
+        });
+        
+        // Also handle space key
+        this.input.keyboard.once('keydown-SPACE', () => {
+          if (!jinglePlayed) {
+            jingle.play();
+            jinglePlayed = true;
+          }
+          this.scene.start('CharacterSelect');
+        });
+      }
+    }
+
+    class CharacterSelect extends Phaser.Scene {
+      constructor() {
+        super('CharacterSelect');
+      }
+      
+      preload() {
+        // Load character images for selection screen
+        this.load.image('toddle_1', 'toddle_1.png');
+        this.load.image('pippin_1', 'pippin_1.png');
+        this.load.image('reef', 'reef.png');
+      }
+      
+      create() {
+        // Add background
+        this.add.image(this.cameras.main.centerX, this.cameras.main.centerY, 'reef');
+        
+        // Add title text
+        this.add.text(this.cameras.main.centerX, 150, 'Choose Your Character', {
+          fontSize: '64px',
+          fill: '#ffffff',
+          fontStyle: 'bold',
+          backgroundColor: '#00000080',
+          padding: { x: 20, y: 10 },
+        }).setOrigin(0.5);
+        
+        // Create character selection buttons
+        const buttonStyle = {
+          fontSize: '32px',
+          fill: '#ffffff',
+          backgroundColor: '#00000080',
+          padding: { x: 20, y: 10 },
+        };
+        
+        // toddle selection
+        const toddleContainer = this.add.container(this.cameras.main.centerX - 200, 400);
+        const toddleSprite = this.add.image(0, 0, 'toddle_1').setScale(0.3);
+        const toddleText = this.add.text(0, 100, 'Toddle', buttonStyle).setOrigin(0.5);
+        toddleContainer.add([toddleSprite, toddleText]);
+        toddleContainer.setInteractive(new Phaser.Geom.Rectangle(-100, -100, 200, 250), Phaser.Geom.Rectangle.Contains);
+        
+        // Pippin selection
+        const pippinContainer = this.add.container(this.cameras.main.centerX + 200, 400);
+        const pippinSprite = this.add.image(0, 0, 'pippin_1').setScale(0.3);
+        const pippinText = this.add.text(0, 100, 'Pippin', buttonStyle).setOrigin(0.5);
+        pippinContainer.add([pippinSprite, pippinText]);
+        pippinContainer.setInteractive(new Phaser.Geom.Rectangle(-100, -100, 200, 250), Phaser.Geom.Rectangle.Contains);
+        
+        // Add hover effects
+        [toddleContainer, pippinContainer].forEach(container => {
+          container.on('pointerover', () => {
+            container.list[1].setStyle({ fill: '#ffff00' });
+            this.tweens.add({
+              targets: container.list[0],
+              scale: 0.35,
+              duration: 200
+            });
+          });
+          
+          container.on('pointerout', () => {
+            container.list[1].setStyle({ fill: '#ffffff' });
+            this.tweens.add({
+              targets: container.list[0],
+              scale: 0.3,
+              duration: 200
+            });
+          });
+        });
+        
+        // Add selection handlers
+        toddleContainer.on('pointerdown', () => {
+          this.scene.start('MainGame', { character: 'toddle' });
+        });
+        
+        pippinContainer.on('pointerdown', () => {
+          this.scene.start('MainGame', { character: 'pippin' });
+        });
+        
+        // Add disclaimer text
+        this.add.text(this.cameras.main.centerX, 600, 
+          'These are original characters created just for this game!\nAny similarities to other characters are purely coincidental.', {
+          fontSize: '16px',
+          fill: '#ffffff',
+          backgroundColor: '#00000080',
+          padding: { x: 15, y: 8 },
+          align: 'center',
+          lineSpacing: 5
+        }).setOrigin(0.5);
+        
+        // Display coin count
+        const coinCount = getCoins();
+        this.add.text(20, 20, `Coins: ${coinCount}`, {
+          fontSize: '24px',
+          fill: '#ffff00',
+          fontStyle: 'bold',
+          backgroundColor: '#00000080',
+          padding: { x: 10, y: 5 },
+        });
+      }
+    }
+
+    class MainGame extends Phaser.Scene {
+      constructor() {
+        super('MainGame');
+        
+        // Initialize class properties
+        this.player = null;
+        this.cursors = null;
+        this.sharks = null;
+        this.octopi = null;
+        this.giantFish = null;
+        this.portal = null;
+        this.stage = 0;
+        this.messages = null;
+        this.gameOver = false;
+        this.messageTimer = null;
+        this.currentTurtleLevel = 1;
+        this.currentPortalIndex = 0;
+
+        // Add bubble-related properties
+        this.bubbleShield = null;
+        this.hasShield = false;
+        this.shieldRespawnTimer = null;
+        this.shieldCountdownText = null;
+        this.bubbleProjectiles = null;
+        this.canShootBubbles = false;
+        this.lastBubbleShot = 0;
+        this.bubbleCooldownText = null;
+
+        // Add ice chunk properties
+        this.iceProjectiles = null;
+        this.canShootIce = false;
+        this.lastIceShot = 0;
+        this.iceCooldownText = null;
+        this.ICE_SHOT_SPEED = 300;
+        this.ICE_SHOT_DISTANCE = 400;
+        this.ICE_COOLDOWN = 1500; // 1.5 seconds
+        this.ICE_SHOT_SCALE = 0.3;
+        
+        // Add shockwave properties
+        this.canUseShockwave = false;
+        this.lastShockwaveTime = 0;
+        this.shockwaveCountdownText = null;
+
+        // Add dash-related properties
+        this.isDashing = false;
+        this.canDash = false;
+        this.lastDashTime = 0;
+        this.DASH_SPEED = 2000;
+        this.DASH_DURATION = 500;
+        this.DASH_COOLDOWN = 2000; // Same as bubble cooldown
+        this.dashCooldownText = null;
+
+        // Add these constants at the top with the other constants
+        this.FREEZE_DURATION = 2000; // 2 seconds in milliseconds
+        this.FREEZE_COOLDOWN = 5000; // 5 seconds in milliseconds
+        this.canFreezeSharks = false;
+        this.lastFreezeTime = 0;
+        this.freezeCooldownText = null;
+        this.frozenSharks = new Set();
+        
+        // Add ink properties
+        this.inkSplat = null;
+        this.isInked = false;
+        
+        // Add coin display property
+        this.coinText = null;
+
+        // Portal positions
+        this.portalPositions = [
+          { x: 1250, y: 150 },  // Top right
+          { x: 150, y: 650 },   // Bottom left
+          { x: 1250, y: 650 },  // Bottom right
+          { x: 150, y: 150 }    // Top left
+        ];
+      }
+
+      init(data) {
+        this.selectedCharacter = data.character;
+      }
+
+      preload() {
+        this.load.image('reef', 'reef.png');
+        // Load character evolution sprites based on selection
+        if (this.selectedCharacter === 'toddle') {
+          this.load.image('player_1', 'toddle_1.png');
+          this.load.image('player_2', 'toddle_2.png');
+          this.load.image('player_3', 'toddle_3.png');
+          this.load.image('player_4', 'toddle_4.png');
+        } else {
+          this.load.image('player_1', 'pippin_1.png');
+          this.load.image('player_2', 'pippin_2.png');
+          this.load.image('player_3', 'pippin_3.png');
+          this.load.image('player_4', 'pippin_4.png');
+          this.load.image('ice_chunk', 'ice_chunk.png');
+          this.load.image('penguin_dash', 'penguin_dash.png');
+          this.load.image('shark_frozen', 'shark_frozen.png');
+        }
+        this.load.image('shark', 'shark.png');
+        this.load.image('shark_attack', 'shark_attack.png');
+        this.load.image('fish', 'giant_fish.png');
+        this.load.image('this.portal', 'portal.png');
+        this.load.image('bubble', 'bubble.png');
+        this.load.image('shockwave', 'shockwave.png');
+        this.load.image('octopus', 'octopus.png');
+        this.load.image('ink_splat', 'ink_splat.png');
+
+        // Load all sound effects
+        this.load.audio('portal', 'portal.mp3');
+        this.load.audio('shark_attack', 'shark_attack.mp3');
+        this.load.audio('ice_shoot', 'ice_shoot.mp3');
+        this.load.audio('dash', 'dash.mp3');
+        this.load.audio('bubble_pop', 'bubble_pop.mp3');
+        this.load.audio('shield_up', 'shield_up.mp3');
+        this.load.audio('shockwave', 'shockwave.mp3');
+        this.load.audio('freeze', 'freeze.mp3');
+        this.load.audio('bubble_shoot', 'bubble_shoot.mp3');
+        this.load.audio('underwater_background', 'underwater_background_audio.mp3');
+        this.load.audio('shark_runaway', 'shark_runaway.mp3');
+        this.load.audio('octopus_ink', 'octopus_ink.mp3');
+        this.load.audio('win_game', 'win_game.mp3');
+      }
+
+      // Add bubble creation function
+      createBubbleShield() {
+        if (this.gameOver) return;
+
+        if (this.bubbleShield) {
+            this.bubbleShield.destroy();
+        }
+        // Create countdown text if it doesn't exist
+        if (!this.shieldCountdownText) {
+            this.shieldCountdownText = this.add.text(0, 0, '', {
+                fontSize: '16px',
+                fill: '#ffff00',
+                fontStyle: 'bold'
+            });
+            this.shieldCountdownText.setOrigin(0.5);
+        }
+        
+        // Start the countdown
+        let timeLeft = SHIELD_RESPAWN_TIME / 1000;
+        this.shieldCountdownText.setText(`(${timeLeft})`);
+        
+        this.shieldRespawnTimer = this.time.addEvent({
+            delay: 1000,
+            callback: () => {
+                timeLeft--;
+                if (timeLeft > 0) {
+                    this.shieldCountdownText.setText(`(${timeLeft})`);
+                } else {
+                    this.shieldCountdownText.setText('');
+                }
+            },
+            repeat: 2
+        });
+
+        // Create shield after delay
+        this.time.delayedCall(SHIELD_RESPAWN_TIME, () => {
+            this.bubbleShield = this.add.image(this.player.x, this.player.y, 'bubble');
+            this.bubbleShield.setScale(0.3);
+            this.hasShield = true;
+            this.sounds.shieldUp.play();
+        }, [], this);
+      }
+
+      createOctopi(scene) {      
+        for (let i = 0; i < OCTOPUS_COUNT; i++) {
+            const x = Phaser.Math.Between(100, config.width - 100);
+            const y = Phaser.Math.Between(100, config.height - 100);
+            
+            const octopus = this.octopi.create(x, y, 'octopus');
+            octopus.setScale(0.5);
+            octopus.setCollideWorldBounds(true);
+            octopus.setBounce(1);
+            
+            // Set random velocity
+            const velocityX = Phaser.Math.Between(-OCTOPUS_SPEED, OCTOPUS_SPEED);
+            const velocityY = Phaser.Math.Between(-OCTOPUS_SPEED, OCTOPUS_SPEED);
+            octopus.setVelocity(velocityX, velocityY);
+            
+            // Store initial direction
+            octopus.lastVelocityX = velocityX;
+        }
+      }
+
+      createInkSplat(scene) {
+        if (this.isInked) return; // Don't stack ink effects
+        
+        console.log('Creating ink splat effect'); // Debug message
+        this.isInked = true;
+        this.sounds.octopusInk.play();
+        
+        // Create ink splat in center of screen
+        this.inkSplat = this.add.image(
+            this.cameras.main.centerX,
+            this.cameras.main.centerY,
+            'ink_splat'
+        );
+        this.inkSplat.setScale(INK_SPLAT_SCALE);
+        this.inkSplat.setDepth(1000); // Ensure it appears above everything
+        this.inkSplat.setAlpha(0.8);  // Make slightly transparent
+        
+        // Add a background to make ink more visible
+        const blackout = this.add.rectangle(
+            this.cameras.main.centerX,
+            this.cameras.main.centerY,
+            this.cameras.main.width,
+            this.cameras.main.height,
+            0x000000
+        );
+        blackout.setDepth(999);  // Just behind ink splat
+        blackout.setAlpha(0.5);  // Semi-transparent black background
+        
+        // Clear ink after duration
+        this.time.delayedCall(INK_SPLAT_DURATION, () => {
+            console.log('Clearing ink splat effect'); // Debug message
+            if (this.inkSplat) {
+                this.inkSplat.destroy();
+                this.inkSplat = null;
+            }
+            if (blackout) {
+                blackout.destroy();
+            }
+            this.isInked = false;
+        });
+      }
+
+      createShockwave() {
+        if (!this.canUseShockwave || this.gameOver) return;
+
+        const currentTime = this.time.now;
+        if (currentTime - this.lastShockwaveTime < SHOCKWAVE_COOLDOWN) return;
+
+        this.sounds.shockwave.play();
+
+        // Create shockwave effect
+        const shockwave = this.add.image(this.player.x, this.player.y, 'shockwave');
+        shockwave.setScale(0.2);
+        shockwave.setAlpha(0.7);
+
+        // Animate shockwave
+        this.tweens.add({
+          targets: shockwave,
+          scale: SHOCKWAVE_MAX_SCALE,
+          alpha: 0,
+          duration: SHOCKWAVE_DURATION,
+          ease: 'Quad.easeOut',
+          onComplete: () => {
+            shockwave.destroy();
+          }
+        });
+
+        // Push away nearby sharks
+        this.sharks.children.each(shark => {
+          if (shark.isRetreating) return;
+
+          const dx = shark.x - this.player.x;
+          const dy = shark.y - this.player.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance <= SHOCKWAVE_RANGE) {
+            shark.isRetreating = true;
+            this.sounds.sharkRunAway.play();
+            const force = (SHOCKWAVE_RANGE - distance) / SHOCKWAVE_RANGE * SHOCKWAVE_PUSH_FORCE;
+            const angle = Math.atan2(dy, dx);
+            
+            shark.setVelocity(
+              Math.cos(angle) * force,
+              Math.sin(angle) * force
+            );
+            
+            shark.body.setCollideWorldBounds(false);
+
+            // Add timer to reset shark movement
+            this.time.delayedCall(SHARK_RESET_TIME, () => {
+              if (shark && shark.active) {
+                shark.isRetreating = false;
+                shark.body.setCollideWorldBounds(true);
+                shark.setBounce(1);
+                
+                // Set new random velocity
+                const baseSpeed = INITIAL_SHARK_SPEED * (1 + ((this.currentTurtleLevel - 1) * SPEED_INCREASE_PER_LEVEL / INITIAL_SHARK_SPEED));
+                shark.setVelocity(
+                  Phaser.Math.Between(-baseSpeed, baseSpeed),
+                  Phaser.Math.Between(-baseSpeed, baseSpeed)
+                );
+              }
+            });
+          }
+        });
+
+        this.lastShockwaveTime = currentTime;
+      }
+
+
+      // Rest of the functions remain the same...
+      fadeOutMessage(scene, delay = 3000) {
+        if (this.messageTimer) {
+          this.messageTimer.remove();
+        }
+        this.messages.setAlpha(1);
+        this.messageTimer = scene.time.delayedCall(delay, () => {
+          scene.tweens.add({
+            targets: this.messages,
+            alpha: 0,
+            duration: 500,
+            ease: 'Power2'
+          });
+        });
+      }
+
+      createSharks(scene, count, speedMultiplier = 1) {
+        for (let i = 0; i < count; i++) {
+          let x, y;
+          let attempts = 0;
+          const maxAttempts = 50; // Prevent infinite loop
+          
+          do {
+            x = Phaser.Math.Between(100, 1400);
+            y = Phaser.Math.Between(100, 800);
+            attempts++;
+            
+            // Check distance from this.player AND this.portal
+            const distanceFromPlayer = Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y);
+            const distanceFromPortal = Phaser.Math.Distance.Between(x, y, this.portal.x, this.portal.y);
+            
+            if (distanceFromPlayer >= 300 && distanceFromPortal >= 200) {
+              break;
+            }
+          } while (attempts < maxAttempts);
+
+          const shark = this.sharks.create(x, y, 'shark');
+          const baseSpeed = INITIAL_SHARK_SPEED * speedMultiplier;
+          shark.setVelocity(
+            Phaser.Math.Between(-baseSpeed, baseSpeed), 
+            Phaser.Math.Between(-baseSpeed, baseSpeed)
+          );
+          shark.setScale(0.5);
+          shark.setCollideWorldBounds(true);
+          shark.setBounce(1);
+
+          const radius = shark.width / 4;
+          const offsetY = shark.height / 4;
+          shark.body.setCircle(radius, 0, offsetY);
+          
+          shark.circleOffset = {
+            radius: radius,
+            offsetY: offsetY
+          };
+        }
+      }
+
+      create() {
+        this.add.image(this.cameras.main.centerX, this.cameras.main.centerY, 'reef');
+        
+        // Detect if on mobile/tablet device
+        this.isMobile = this.detectMobileDevice();
+        
+        // Create touch controls only on mobile/tablet
+        if (this.isMobile) {
+          this.createTouchControls();
+        }
+
+        // Create initial message with controls and objective
+        let initialMessage = "Welcome to Coral Reef Adventure!\n\n";
+        initialMessage += "CONTROLS:\n";
+        if (this.isMobile) {
+          initialMessage += "Use on-screen controls to move\n";
+        } else {
+          initialMessage += "↑↓←→ or WASD : Move your character\n";
+          initialMessage += "Q / W / E : Use abilities (when unlocked)\n";
+        }
+        
+        initialMessage += "\nOBJECTIVE:\n";
+        initialMessage += "Find the portals to evolve!\n";
+        initialMessage += "Avoid or defeat sharks!\n";
+        initialMessage += "Reach your final form!";
+
+        this.messages = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY, initialMessage, {
+          fontSize: '24px',
+          fill: '#ffffff',
+          fontStyle: 'bold',
+          backgroundColor: '#00000080',
+          padding: { x: 20, y: 10 },
+          align: 'center'
+        });
+        this.messages.setOrigin(0.5);
+
+        this.fadeOutMessage(this, 10000);
+
+        // Create sound effects
+        this.sounds = {
+          portal: this.sound.add('portal'),
+          sharkAttack: this.sound.add('shark_attack'),
+          iceShoot: this.sound.add('ice_shoot'),
+          dash: this.sound.add('dash'),
+          bubblePop: this.sound.add('bubble_pop'),
+          shieldUp: this.sound.add('shield_up'),
+          shockwave: this.sound.add('shockwave'),
+          freeze: this.sound.add('freeze'),
+          bubbleShoot: this.sound.add('bubble_shoot'),
+          underWaterBackground: this.sound.add('underwater_background', {
+            loop: true,
+            volume: 0.5
+          }),
+          sharkRunAway: this.sound.add('shark_runaway'),
+          octopusInk: this.sound.add('octopus_ink'),
+          winGame: this.sound.add('win_game')
+        };
+
+        // Create this.player with current evolution level
+        this.player = this.physics.add.sprite(100, 100, `player_${this.currentTurtleLevel}`);
+        this.player.setCollideWorldBounds(true);
+        this.player.setScale(0.2);
+        this.player.setFlipX(false);
+
+        // Create this.portal in first corner
+        this.portal = this.physics.add.sprite(this.portalPositions[this.currentPortalIndex].x, 
+                                       this.portalPositions[this.currentPortalIndex].y, 'this.portal');
+        this.portal.setScale(0.5);
+        this.portal.setImmovable(true);
+
+        // Set circular collision for this.player
+        const playerRadius = this.player.width / 2.5;
+        this.player.body.setCircle(playerRadius, this.player.width / 10, this.player.width / 10);
+
+        this.bubbleProjectiles = this.physics.add.group();
+
+        // Initialize shark group
+        this.sharks = this.physics.add.group();
+        this.createSharks(this, INITIAL_SHARKS, 1);
+
+        this.giantFish = this.physics.add.group({ key: 'fish', repeat: 2, setXY: { x: 300, y: 400, stepX: 200 } });
+
+        this.giantFish.children.iterate(fish => {
+          // Set initial velocity
+          const initialVelocityX = Phaser.Math.Between(-120, 120);
+          const initialVelocityY = Phaser.Math.Between(-120, 120);
+          fish.setVelocity(initialVelocityX, initialVelocityY);
+          fish.setCollideWorldBounds(true);
+          fish.setBounce(1);
+          // Set initial direction based on velocity
+          fish.setFlipX(initialVelocityX > 0);
+          fish.lastVelocityX = initialVelocityX;
+        });
+
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+
+        this.physics.add.overlap(this.player, this.sharks, this.gameOverHandler, null, this);
+        // this.physics.add.overlap(this.player, this.giantFish, () => this.showMessage("Avoid the giant fish!", null, true), null, this);
+        this.physics.add.overlap(this.player, this.portal, this.handlePortalContact, null, this);
+
+        this.physics.add.overlap(this.bubbleProjectiles, this.sharks, this.handleBubbleSharkCollision, null, this);
+
+        this.octopi = this.physics.add.group();
+        this.physics.add.overlap(this.player, this.octopi, (player, octopus) => { this.createInkSplat(); }, null, this);
+
+        if (this.selectedCharacter === 'pippin') {
+          this.iceProjectiles = this.physics.add.group();
+          this.physics.add.overlap(this.iceProjectiles, this.sharks, this.handleIceSharkCollision, null, this);
+          
+          // Add cooldown text for ice shots
+          this.iceCooldownText = this.add.text(0, 0, '', {
+            fontSize: '16px',
+            fill: '#87CEEB',
+            fontStyle: 'bold'
+          });
+          this.iceCooldownText.setOrigin(0.5);
+
+          // Add dash cooldown text
+          this.dashCooldownText = this.add.text(0, 0, '', {
+            fontSize: '16px',
+            fill: '#87CEEB',
+            fontStyle: 'bold'
+          });
+          this.dashCooldownText.setOrigin(0.5);
+        }
+
+        // Add cooldown text
+        this.bubbleCooldownText = this.add.text(0, 0, '', {
+            fontSize: '16px',
+            fill: '#00ffff',
+            fontStyle: 'bold'
+        });
+        this.bubbleCooldownText.setOrigin(0.5);
+
+        // Add shockwave countdown text
+        this.shockwaveCountdownText = this.add.text(0, 0, '', {
+          fontSize: '16px',
+          fill: '#ff00ff',
+          fontStyle: 'bold'
+        });
+        this.shockwaveCountdownText.setOrigin(0.5);
+
+        if (this.selectedCharacter === 'pippin') {
+          this.freezeCooldownText = this.add.text(0, 0, '', {
+            fontSize: '16px',
+            fill: '#00ffff',
+            fontStyle: 'bold'
+          });
+          this.freezeCooldownText.setOrigin(0.5);
+        }
+
+        this.sounds.underWaterBackground.play();
+        
+        // Add coin display
+        this.coinText = this.add.text(20, 20, `Coins: ${getCoins()}`, {
+          fontSize: '24px',
+          fill: '#ffff00',
+          fontStyle: 'bold',
+          backgroundColor: '#00000080',
+          padding: { x: 10, y: 5 },
+        });
+        this.coinText.setDepth(999);
+
+        if (DEBUG_MODE) {
+          this.input.keyboard.on('keydown-D', () => {
+            this.physics.world.drawDebug = !this.physics.world.drawDebug;
+            if (!this.physics.world.drawDebug) {
+              this.physics.world.debugGraphic.clear();
+            }
+          });
+        }
+      }
+
+      handlePortalContact() {
+        this.sounds.portal.play();
+
+        // Create portal swirl effect
+        const portalEffect = this.add.image(this.portal.x, this.portal.y, 'this.portal');
+        portalEffect.setScale(0.5);
+        this.tweens.add({
+          targets: portalEffect,
+          scale: 2,
+          alpha: 0,
+          rotation: Math.PI * 2,
+          duration: 1000,
+          ease: 'Cubic.easeOut',
+          onComplete: () => portalEffect.destroy()
+        });
+
+        // First check if already at max level
+        if (this.currentTurtleLevel >= 4) {
+          // Award a coin for winning
+          const newCoinTotal = addCoins(1);
+          this.showMessage("CONGRATULATIONS!\nYou have reached your final form!\nYOU WIN!\n\n+1 Coin!\n\nPress SPACE to play again", '#00ff00', false);
+          
+          // Update coin display
+          if (this.coinText) {
+            this.coinText.setText(`Coins: ${newCoinTotal}`);
+          }
+          
+          launchConfetti(5000);
+          this.sounds.winGame.play();
+          this.gameOver = true; // Set game over flag to prevent further actions
+          this.tweens.addCounter({
+            from: this.sounds.underWaterBackground.volume,  // start from current volume (0.5)
+            to: 0,                                         // fade down to 0
+            duration: 2000,                                // 2 seconds
+            onUpdate: tween => {
+              const newVolume = tween.getValue();
+              this.sounds.underWaterBackground.setVolume(newVolume);
+            },
+            onComplete: () => {
+              this.sounds.underWaterBackground.stop(); // Stop it after fade
+            }
+          });
+          this.physics.pause();
+          
+          // Add restart handler
+          this.input.keyboard.once('keydown-SPACE', () => {
+            this.resetGameState();
+            this.scene.start('CharacterSelect');
+          });
+          return;
+        }
+
+        this.currentTurtleLevel++;
+        this.player.setTexture(`player_${this.currentTurtleLevel}`);
+
+
+
+        // Enable ice shooting from stage 2 onwards for Piplup
+        if (this.currentTurtleLevel >= 2 && this.selectedCharacter === 'pippin' && !this.canShootIce) {
+          this.canShootIce = true;
+          const iceMessage = this.isMobile ? 
+            "Ice shot ability unlocked!\nUse the blue button to shoot ice!" : 
+            "Ice shot ability unlocked!\nPress Q to shoot ice!";
+          this.showMessage(iceMessage, '#87CEEB', true);
+          // Show Q button for ice shooting
+          if (this.isMobile) {
+            this.touchAction1Button.setVisible(true);
+            this.touchAction1Text.setVisible(true);
+          }
+        }
+
+        // Enable shield for toddle
+        if (this.currentTurtleLevel >= 2 && this.selectedCharacter === 'toddle' && !this.hasShield && !this.shieldRespawnTimer) {
+          this.createBubbleShield.call(this);
+          this.showMessage("Shield ability unlocked. Shield activating in 3 seconds!", '#87CEEB', true);
+        }
+
+        // Calculate new speed multiplier
+        const speedMultiplier = 1 + ((this.currentTurtleLevel - 1) * SPEED_INCREASE_PER_LEVEL / INITIAL_SHARK_SPEED);
+        
+        // Add faster sharks
+        this.createSharks(this, SHARKS_PER_LEVEL, speedMultiplier);
+
+        // Update existing sharks' speed
+        this.sharks.children.iterate(shark => {
+          const currentVelX = shark.body.velocity.x;
+          const currentVelY = shark.body.velocity.y;
+          const currentSpeed = Math.sqrt(currentVelX * currentVelX + currentVelY * currentVelY);
+          const direction = {
+            x: currentVelX / currentSpeed,
+            y: currentVelY / currentSpeed
+          };
+          const newSpeed = INITIAL_SHARK_SPEED * speedMultiplier;
+          shark.setVelocity(direction.x * newSpeed, direction.y * newSpeed);
+        });
+
+        // Move this.portal to next corner
+        this.currentPortalIndex = (this.currentPortalIndex + 1) % this.portalPositions.length;
+        this.portal.setPosition(this.portalPositions[this.currentPortalIndex].x, this.portalPositions[this.currentPortalIndex].y);
+
+        const totalSharks = INITIAL_SHARKS + (this.currentTurtleLevel - 1) * SHARKS_PER_LEVEL;
+        const speedPercentage = Math.round((speedMultiplier - 1) * 100);
+
+        if (this.currentTurtleLevel === 3) {
+          this.createOctopi(this);
+        }
+
+        if (this.currentTurtleLevel >= 3) {
+          // Enable dash from stage 2 onwards for Piplup
+          if (this.selectedCharacter === 'pippin') {
+            this.canDash = true;
+            const dashMessage = this.isMobile ? 
+              "Dive dash ability unlocked!\nUse the red button to dash forward!" : 
+              "Dive dash ability unlocked!\nPress W to dash forward!";
+            this.showMessage(dashMessage, '#87CEEB', true);
+            // Show W button for dash
+            if (this.isMobile) {
+              this.touchAction2Button.setVisible(true);
+              this.touchAction2Text.setVisible(true);
+            }
+          } else {
+            this.canShootBubbles = true;
+            const bubbleMessage = this.isMobile ? 
+              "Bubble cannon ability unlocked!\nUse the blue button to shoot bubbles!" : 
+              "Bubble cannon ability unlocked!\nPress Q to shoot bubbles!";
+            this.showMessage(bubbleMessage, '#87CEEB', true);
+            // Show Q button for bubble shooting
+            if (this.isMobile) {
+              this.touchAction1Button.setVisible(true);
+              this.touchAction1Text.setVisible(true);
+            }
+          }
+        }
+
+        if (this.currentTurtleLevel >= 4) {
+          if (this.selectedCharacter === 'pippin') {
+            this.canFreezeSharks = true;
+            const freezeMessage = this.isMobile ? 
+              "Freeze ocean ability unlocked!\nUse the green button to freeze!" : 
+              "Freeze ocean ability unlocked!\nPress E to freeze!";
+            this.showMessage(freezeMessage, '#87CEEB', true);
+            // Show E button for freeze
+            if (this.isMobile) {
+              this.touchAction3Button.setVisible(true);
+              this.touchAction3Text.setVisible(true);
+            }
+          } else {
+            this.canUseShockwave = true;
+            const shockwaveMessage = this.isMobile ? 
+              "Shockwave ability unlocked!\nUse the red button to cause a shockwave!" : 
+              "Shockwave ability unlocked!\nPress W to cause a shockwave!";
+            this.showMessage(shockwaveMessage, '#87CEEB', true);
+            // Show W button for shockwave
+            if (this.isMobile) {
+              this.touchAction2Button.setVisible(true);
+              this.touchAction2Text.setVisible(true);
+            }
+          }
+        }
+      }
+
+      // Add bubble shooting function
+      shootBubbles() {
+        if (!this.canShootBubbles || this.gameOver) return;
+
+        const currentTime = this.time.now;
+        if (currentTime - this.lastBubbleShot < BUBBLE_COOLDOWN) return;
+
+        this.sounds.bubbleShoot.play();
+
+        // Define angles based on this.player direction
+        let angles;
+        if (this.player.flipX) {  // Facing right
+            angles = [45, 315];  // 315° and 225° for right-facing
+        } else {  // Facing left
+            angles = [135, 225];   // 45° and 135° for left-facing
+        }
+
+        angles.forEach(angle => {
+            const bubble = this.bubbleProjectiles.create(this.player.x, this.player.y, 'bubble');
+            bubble.setScale(BUBBLE_SHOT_SCALE);
+            
+            const rad = Phaser.Math.DegToRad(angle);
+            const velocityX = Math.cos(rad) * BUBBLE_SHOT_SPEED;
+            const velocityY = Math.sin(rad) * BUBBLE_SHOT_SPEED;
+            
+            bubble.setVelocity(velocityX, velocityY);
+
+            this.time.delayedCall(BUBBLE_SHOT_DISTANCE / BUBBLE_SHOT_SPEED * 1000, () => {
+                if (bubble && bubble.active) {
+                    bubble.destroy();
+                }
+            });
+        });
+
+        this.lastBubbleShot = currentTime;
+      }
+
+      shootIce() {
+        if (!this.canShootIce || this.gameOver) return;
+
+        const currentTime = this.time.now;
+        if (currentTime - this.lastIceShot < this.ICE_COOLDOWN) return;
+
+        this.sounds.iceShoot.play();
+
+        const ice = this.iceProjectiles.create(this.player.x, this.player.y, 'ice_chunk');
+        ice.setScale(this.ICE_SHOT_SCALE);
+        
+        // Set velocity based on player direction
+        const velocityX = this.player.flipX ? this.ICE_SHOT_SPEED : -this.ICE_SHOT_SPEED;
+        ice.setVelocity(velocityX, 0);
+        ice.setFlipX(this.player.flipX);
+
+        // Destroy ice chunk after set distance
+        this.time.delayedCall(this.ICE_SHOT_DISTANCE / this.ICE_SHOT_SPEED * 1000, () => {
+          if (ice && ice.active) {
+            ice.destroy();
+          }
+        });
+
+        this.lastIceShot = currentTime;
+      }
+
+      // Add collision handler for ice and sharks
+      handleIceSharkCollision(ice, shark) {
+        if (shark.isRetreating) return;
+
+        // Destroy the ice chunk
+        ice.destroy();
+
+        // Make shark retreat
+        shark.isRetreating = true;
+        this.sounds.sharkRunAway.play();
+
+        // Calculate direction away from collision point
+        const dx = shark.x - ice.x;
+        const dy = shark.y - ice.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const dirX = dx / distance;
+        const dirY = dy / distance;
+
+        shark.setVelocity(
+          dirX * SHARK_RETREAT_SPEED,
+          dirY * SHARK_RETREAT_SPEED
+        );
+
+        shark.body.setCollideWorldBounds(false);
+
+        setTimeout(() => {
+          shark.setTexture('shark');
+        }, 200);
+      }
+
+      performDash() {
+        if (!this.canDash || this.isDashing || this.gameOver) return;
+
+        const currentTime = this.time.now;
+        if (currentTime - this.lastDashTime < this.DASH_COOLDOWN) return;
+
+        this.isDashing = true;
+        this.player.setTexture('penguin_dash');
+
+        this.sounds.dash.play();
+
+        // Calculate target position based on facing direction
+        const DASH_DISTANCE = 200; // Number of pixels to dash
+        // const targetX = this.player.flipX 
+        //   ? Math.min(this.player.x + DASH_DISTANCE, config.width - this.player.width/2)
+        //   : Math.max(this.player.x - DASH_DISTANCE, this.player.width/2);
+        const targetX = this.player.flipX 
+          ? Math.min(this.player.x + DASH_DISTANCE, config.width - 20) // Right boundary
+          : Math.max(this.player.x - DASH_DISTANCE, 20);  // Left boundary
+
+        // Create tween for smooth movement
+        this.tweens.add({
+          targets: this.player,
+          x: targetX,
+          duration: this.DASH_DURATION,
+          ease: 'Quad.easeOut',
+          onComplete: () => {
+            this.isDashing = false;
+            this.player.setTexture(`player_${this.currentTurtleLevel}`);
+          }
+        });
+
+        this.lastDashTime = currentTime;
+      }
+
+      freezeSharks() {
+        if (!this.canFreezeSharks || this.gameOver) return;
+
+        const currentTime = this.time.now;
+        if (currentTime - this.lastFreezeTime < this.FREEZE_COOLDOWN) return;
+
+        this.sounds.freeze.play();
+
+        // Freeze all sharks
+        this.sharks.children.each(shark => {
+          if (!shark.isRetreating) {
+            // Store original velocity
+            shark.originalVelocity = {
+              x: shark.body.velocity.x,
+              y: shark.body.velocity.y
+            };
+            
+            // Stop shark movement
+            shark.setVelocity(0, 0);
+            
+            // Change texture
+            shark.setTexture('shark_frozen');
+            
+            // Add to frozen set
+            this.frozenSharks.add(shark);
+            
+            // Unfreeze after duration
+            this.time.delayedCall(this.FREEZE_DURATION, () => {
+              if (shark && shark.active) {
+                shark.setTexture('shark');
+                if (shark.originalVelocity) {
+                  shark.setVelocity(
+                    shark.originalVelocity.x,
+                    shark.originalVelocity.y
+                  );
+                }
+                this.frozenSharks.delete(shark);
+              }
+            });
+          }
+        });
+
+        this.lastFreezeTime = currentTime;
+      }
+
+      detectMobileDevice() {
+        // Check if on mobile or tablet device
+        const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+        
+        // Check for mobile devices
+        if (/android/i.test(userAgent)) return true;
+        if (/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream) return true;
+        if (/windows phone/i.test(userAgent)) return true;
+        
+        // Check for tablets
+        if (/tablet/i.test(userAgent)) return true;
+        if (/iPad/.test(userAgent)) return true;
+        
+        // Check for touch capability as fallback
+        const hasTouch = 'ontouchstart' in window || 
+                        navigator.maxTouchPoints > 0 || 
+                        navigator.msMaxTouchPoints > 0;
+        
+        // Also check screen size for tablets
+        const screenWidth = window.innerWidth;
+        const screenHeight = window.innerHeight;
+        const isMobileSize = Math.min(screenWidth, screenHeight) < 768;
+        
+        return hasTouch && isMobileSize;
+      }
+
+      createTouchControls() {
+        // Touch control properties
+        this.touchControls = {
+          up: false,
+          down: false,
+          left: false,
+          right: false,
+          action1: false,
+          action2: false,
+          action3: false
+        };
+
+        // Control button style
+        const buttonStyle = {
+          fontSize: '24px',
+          fill: '#ffffff',
+          fontStyle: 'bold'
+        };
+
+        const buttonAlpha = 0.6;
+        const buttonSize = 60;
+
+        // Create movement controls container in middle left
+        const movementContainer = this.add.container(120, this.cameras.main.height / 2);
+        
+        // Create directional buttons
+        const upButton = this.add.circle(0, -60, buttonSize/2, 0x333333, buttonAlpha);
+        const upText = this.add.text(0, -60, '↑', buttonStyle).setOrigin(0.5);
+        
+        const downButton = this.add.circle(0, 60, buttonSize/2, 0x333333, buttonAlpha);
+        const downText = this.add.text(0, 60, '↓', buttonStyle).setOrigin(0.5);
+        
+        const leftButton = this.add.circle(-60, 0, buttonSize/2, 0x333333, buttonAlpha);
+        const leftText = this.add.text(-60, 0, '←', buttonStyle).setOrigin(0.5);
+        
+        const rightButton = this.add.circle(60, 0, buttonSize/2, 0x333333, buttonAlpha);
+        const rightText = this.add.text(60, 0, '→', buttonStyle).setOrigin(0.5);
+        
+        movementContainer.add([upButton, upText, downButton, downText, leftButton, leftText, rightButton, rightText]);
+        
+        // Set high depth to ensure controls appear on top
+        movementContainer.setDepth(1000);
+        
+        // Set up movement button interactions
+        upButton.setInteractive();
+        upButton.on('pointerdown', () => { this.touchControls.up = true; upButton.setAlpha(1); });
+        upButton.on('pointerup', () => { this.touchControls.up = false; upButton.setAlpha(buttonAlpha); });
+        upButton.on('pointerout', () => { this.touchControls.up = false; upButton.setAlpha(buttonAlpha); });
+        
+        downButton.setInteractive();
+        downButton.on('pointerdown', () => { this.touchControls.down = true; downButton.setAlpha(1); });
+        downButton.on('pointerup', () => { this.touchControls.down = false; downButton.setAlpha(buttonAlpha); });
+        downButton.on('pointerout', () => { this.touchControls.down = false; downButton.setAlpha(buttonAlpha); });
+        
+        leftButton.setInteractive();
+        leftButton.on('pointerdown', () => { this.touchControls.left = true; leftButton.setAlpha(1); });
+        leftButton.on('pointerup', () => { this.touchControls.left = false; leftButton.setAlpha(buttonAlpha); });
+        leftButton.on('pointerout', () => { this.touchControls.left = false; leftButton.setAlpha(buttonAlpha); });
+        
+        rightButton.setInteractive();
+        rightButton.on('pointerdown', () => { this.touchControls.right = true; rightButton.setAlpha(1); });
+        rightButton.on('pointerup', () => { this.touchControls.right = false; rightButton.setAlpha(buttonAlpha); });
+        rightButton.on('pointerout', () => { this.touchControls.right = false; rightButton.setAlpha(buttonAlpha); });
+        
+        // Create action buttons container in middle right
+        const actionContainer = this.add.container(this.cameras.main.width - 120, this.cameras.main.height / 2);
+        
+        // Create action buttons (they will be activated based on character abilities)
+        const action1Button = this.add.circle(-70, -40, buttonSize/2, 0x4444aa, buttonAlpha);
+        const action1Text = this.add.text(-70, -40, 'Q', buttonStyle).setOrigin(0.5);
+        this.touchAction1Button = action1Button;
+        this.touchAction1Text = action1Text;
+        
+        const action2Button = this.add.circle(0, -40, buttonSize/2, 0xaa4444, buttonAlpha);
+        const action2Text = this.add.text(0, -40, 'W', buttonStyle).setOrigin(0.5);
+        this.touchAction2Button = action2Button;
+        this.touchAction2Text = action2Text;
+        
+        const action3Button = this.add.circle(70, -40, buttonSize/2, 0x44aa44, buttonAlpha);
+        const action3Text = this.add.text(70, -40, 'E', buttonStyle).setOrigin(0.5);
+        this.touchAction3Button = action3Button;
+        this.touchAction3Text = action3Text;
+        
+        actionContainer.add([action1Button, action1Text, action2Button, action2Text, action3Button, action3Text]);
+        
+        // Set high depth to ensure controls appear on top
+        actionContainer.setDepth(1000);
+        
+        // Initially hide all action buttons
+        action1Button.setVisible(false);
+        action1Text.setVisible(false);
+        action2Button.setVisible(false);
+        action2Text.setVisible(false);
+        action3Button.setVisible(false);
+        action3Text.setVisible(false);
+        
+        // Set up action button interactions
+        action1Button.setInteractive();
+        action1Button.on('pointerdown', () => { 
+          this.touchControls.action1 = true; 
+          action1Button.setAlpha(1);
+          // Trigger the Q action based on character
+          if (this.selectedCharacter === 'pippin' && this.canShootIce) {
+            this.shootIce();
+          } else if (this.selectedCharacter === 'toddle' && this.canShootBubbles) {
+            this.shootBubbles.call(this);
+          }
+        });
+        action1Button.on('pointerup', () => { this.touchControls.action1 = false; action1Button.setAlpha(buttonAlpha); });
+        action1Button.on('pointerout', () => { this.touchControls.action1 = false; action1Button.setAlpha(buttonAlpha); });
+        
+        action2Button.setInteractive();
+        action2Button.on('pointerdown', () => { 
+          this.touchControls.action2 = true; 
+          action2Button.setAlpha(1);
+          // Trigger the W action based on character
+          if (this.selectedCharacter === 'pippin' && this.canDash && !this.isDashing) {
+            this.performDash();
+          } else if (this.selectedCharacter === 'toddle' && this.canUseShockwave) {
+            this.createShockwave.call(this);
+          }
+        });
+        action2Button.on('pointerup', () => { this.touchControls.action2 = false; action2Button.setAlpha(buttonAlpha); });
+        action2Button.on('pointerout', () => { this.touchControls.action2 = false; action2Button.setAlpha(buttonAlpha); });
+        
+        action3Button.setInteractive();
+        action3Button.on('pointerdown', () => { 
+          this.touchControls.action3 = true; 
+          action3Button.setAlpha(1);
+          // Trigger the E action (freeze for Pippin)
+          if (this.selectedCharacter === 'pippin' && this.canFreezeSharks) {
+            this.freezeSharks();
+          }
+        });
+        action3Button.on('pointerup', () => { this.touchControls.action3 = false; action3Button.setAlpha(buttonAlpha); });
+        action3Button.on('pointerout', () => { this.touchControls.action3 = false; action3Button.setAlpha(buttonAlpha); });
+        
+        // Store references for updating visibility
+        this.movementContainer = movementContainer;
+        this.actionContainer = actionContainer;
+      }
+
+      handleDashCollision(player, shark) {
+        if (!this.isDashing || shark.isRetreating) return;
+
+        // Make shark retreat (similar to bubble collision)
+        shark.isRetreating = true;
+        this.sounds.sharkRunAway.play();
+
+        // Calculate direction away from player
+        const dx = shark.x - player.x;
+        const dy = shark.y - player.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const dirX = dx / distance;
+        const dirY = dy / distance;
+
+        shark.setVelocity(
+          dirX * SHARK_RETREAT_SPEED,
+          dirY * SHARK_RETREAT_SPEED
+        );
+
+        shark.body.setCollideWorldBounds(false);
+
+        setTimeout(() => {
+          shark.setTexture('shark');
+        }, 200);
+      }
+
+      handleBubbleSharkCollision(bubble, shark) {
+        if (shark.isRetreating) return;
+
+        // Destroy the bubble
+        bubble.destroy();
+
+        // Make shark retreat (similar to shield collision)
+        shark.isRetreating = true;
+        this.sounds.sharkRunAway.play();
+
+        // Calculate direction away from collision point
+        const dx = shark.x - bubble.x;
+        const dy = shark.y - bubble.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const dirX = dx / distance;
+        const dirY = dy / distance;
+
+        shark.setVelocity(
+            dirX * SHARK_RETREAT_SPEED,
+            dirY * SHARK_RETREAT_SPEED
+        );
+
+        shark.body.setCollideWorldBounds(false);
+
+        setTimeout(() => {
+            shark.setTexture('shark');
+        }, 200);
+      }
+
+      showMessage(text, color = '#ffffff', autoFade = true) {
+        this.messages.setText(text);
+        this.messages.setStyle({
+          fontSize: '32px',
+          fill: color,
+          fontStyle: 'bold',
+          backgroundColor: '#00000080',
+          padding: { x: 20, y: 10 },
+        });
+        this.messages.setOrigin(0.5);
+        this.messages.setAlpha(1);
+
+        if (autoFade && !this.gameOver) {
+          this.fadeOutMessage(this.messages.scene);
+        }
+      }
+
+      // Add global game state reset function
+      resetGameState() {
+        this.currentTurtleLevel = 1;
+        this.currentPortalIndex = 0;
+        this.stage = 0;
+        this.gameOver = false;
+        this.hasShield = false;
+        this.isDashing = false;
+        this.canDash = false;
+        this.lastDashTime = 0;
+        if (this.dashCooldownText) {
+          this.dashCooldownText.destroy();
+          this.dashCooldownText = null;
+        }
+        if (this.bubbleShield) {
+          this.bubbleShield.destroy();
+          this.bubbleShield = null;
+        }
+        if (this.shieldCountdownText) {
+            this.shieldCountdownText.destroy();
+            this.shieldCountdownText = null;
+        }
+        if (this.shieldRespawnTimer) {
+            this.shieldRespawnTimer.remove();
+            this.shieldRespawnTimer = null;
+        }
+        this.canShootBubbles = false;
+        if (this.bubbleProjectiles) {
+            this.bubbleProjectiles.clear(true, true);
+        }
+        this.lastBubbleShot = 0;
+        if (this.bubbleCooldownText) {
+            this.bubbleCooldownText.destroy();
+            this.bubbleCooldownText = null;
+        }
+        this.canUseShockwave = false;
+        this.lastShockwaveTime = 0;
+        if (this.shockwaveCountdownText) {
+          this.shockwaveCountdownText.destroy();
+          this.shockwaveCountdownText = null;
+        }
+        if (this.octopi) {
+          this.octopi.clear(true, true);
+        }
+        if (this.inkSplat) {
+            this.inkSplat.destroy();
+            this.inkSplat = null;
+        }
+        this.isInked = false;
+        if (this.iceProjectiles) {
+          this.iceProjectiles.clear(true, true);
+        }
+        this.canShootIce = false;
+        this.lastIceShot = 0;
+        if (this.iceCooldownText) {
+          this.iceCooldownText.destroy();
+          this.iceCooldownText = null;
+        }
+        this.canFreezeSharks = false;
+        this.lastFreezeTime = 0;
+        if (this.freezeCooldownText) {
+          this.freezeCooldownText.destroy();
+          this.freezeCooldownText = null;
+        }
+        this.frozenSharks = new Set();
+        
+        // Reset touch control button visibility
+        if (this.touchAction1Button) {
+          this.touchAction1Button.setVisible(false);
+          this.touchAction1Text.setVisible(false);
+        }
+        if (this.touchAction2Button) {
+          this.touchAction2Button.setVisible(false);
+          this.touchAction2Text.setVisible(false);
+        }
+        if (this.touchAction3Button) {
+          this.touchAction3Button.setVisible(false);
+          this.touchAction3Text.setVisible(false);
+        }
+      }
+
+      // Modified handler for Space bar restart
+      gameOverHandler(player, shark) {
+        if (!this.gameOver) {
+          if (shark.isRetreating) {
+              return;
+          }
+
+          if (this.isDashing) {
+            this.handleDashCollision(player, shark);
+            return;
+          }
+
+          if (this.hasShield) {
+            // Shield break code remains the same...
+            this.hasShield = false;
+            this.bubbleShield.destroy();
+            shark.isRetreating = true;
+
+            this.sounds.bubblePop.play();
+            this.sounds.sharkRunAway.play();
+
+            // Calculate direction away from this.player
+            const dx = shark.x - this.player.x;
+            const dy = shark.y - this.player.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const dirX = dx / distance;
+            const dirY = dy / distance;
+
+            shark.setVelocity(
+                dirX * SHARK_RETREAT_SPEED,
+                dirY * SHARK_RETREAT_SPEED
+            );
+
+            shark.body.setCollideWorldBounds(false);
+
+            setTimeout(() => {
+                shark.setTexture('shark');
+            }, 200);
+
+            this.showMessage("Shield broken! Be careful!", '#ffff00', true);
+            
+            // Only start shield respawn if not game over
+            if (!this.gameOver) {
+                this.createBubbleShield.call(this);
+            }
+            
+            return;
+          }
+
+          // Game over code
+          this.gameOver = true;
+          this.sounds.sharkAttack.play();
+
+          // Clear any pending shield timers
+          if (this.shieldRespawnTimer) {
+              this.shieldRespawnTimer.remove();
+              this.shieldRespawnTimer = null;
+          }
+          
+          // Clear countdown text
+          if (this.shieldCountdownText) {
+              this.shieldCountdownText.setText('');
+          }
+
+          this.showMessage('GAME OVER - Shark got you!\nPress SPACE to restart', '#ff0000', false);
+          shark.setTexture('shark_attack');
+          shark.setFlipX(shark.body.velocity.x > 0);
+          this.physics.pause();
+          
+          this.input.keyboard.once('keydown-SPACE', () => {
+              this.resetGameState();
+              this.scene.restart();
+          });
+        }
+      }
+
+      update() {
+        if (this.gameOver) return;
+
+        this.player.setVelocity(0);
+
+        // Check both keyboard and touch controls for movement
+        if (this.cursors.left.isDown || (this.touchControls && this.touchControls.left)) {
+          this.player.setVelocityX(-150);
+          this.player.setFlipX(false);
+        }
+        else if (this.cursors.right.isDown || (this.touchControls && this.touchControls.right)) {
+          this.player.setVelocityX(150);
+          this.player.setFlipX(true);
+        }
+
+        if (this.cursors.up.isDown || (this.touchControls && this.touchControls.up)) this.player.setVelocityY(-150);
+        else if (this.cursors.down.isDown || (this.touchControls && this.touchControls.down)) this.player.setVelocityY(150);
+
+        // Update bubble shield position if it exists
+        if (this.bubbleShield && this.hasShield) {
+          this.bubbleShield.x = this.player.x;
+          this.bubbleShield.y = this.player.y;
+        }
+
+        if (this.shieldCountdownText) {
+            this.shieldCountdownText.x = this.player.x;
+            this.shieldCountdownText.y = this.player.y - 30; // Position above this.player
+        }
+
+        this.giantFish.children.iterate(fish => {
+          if ((fish.lastVelocityX < 0 && fish.body.velocity.x > 0) || 
+              (fish.lastVelocityX > 0 && fish.body.velocity.x < 0)) {
+            fish.setFlipX(fish.body.velocity.x > 0);
+            fish.lastVelocityX = fish.body.velocity.x;
+          }
+        });
+
+        // Clean up sharks that have retreated off screen
+        this.sharks.children.each(shark => {
+          // First check if the shark still exists and is active
+          if (!shark || !shark.active) {
+            return; // Skip if shark is already destroyed
+          }
+
+          if (shark.isRetreating) {
+            // Check if shark is off screen
+            if (shark.x < -100 || shark.x > config.width + 100 ||
+                shark.y < -100 || shark.y > config.height + 100) {
+              shark.destroy();
+            }
+            return; // Skip remaining updates for retreating sharks
+          }
+
+          // Normal shark direction updates (only for non-retreating sharks)
+          if (shark.body.velocity.x > 0) {
+            shark.setFlipX(true);
+            shark.body.setCircle(
+              shark.circleOffset.radius,
+              shark.width / 2,
+              shark.circleOffset.offsetY
+            );
+          } else if (shark.body.velocity.x < 0) {
+            shark.setFlipX(false);
+            shark.body.setCircle(
+              shark.circleOffset.radius,
+              0,
+              shark.circleOffset.offsetY
+            );
+          }
+        });
+
+        if (this.octopi) {
+          this.octopi.children.iterate(octopus => {
+            if ((octopus.lastVelocityX < 0 && octopus.body.velocity.x > 0) || 
+              (octopus.lastVelocityX > 0 && octopus.body.velocity.x < 0)) {
+              octopus.setFlipX(octopus.body.velocity.x > 0);
+              octopus.lastVelocityX = octopus.body.velocity.x;
+            }
+          });
+        }
+
+        // Handle bubble shooting
+        if (this.canShootBubbles && this.input.keyboard.checkDown(this.input.keyboard.addKey('Q'))) {
+          this.shootBubbles.call(this);
+        }
+        // Handle ice shooting for Piplup
+        if (this.selectedCharacter === 'pippin') {
+          if (this.canShootIce && this.input.keyboard.checkDown(this.input.keyboard.addKey('Q'))) {
+            this.shootIce();
+          }
+
+          // Update ice cooldown text
+          if (this.canShootIce) {
+            const currentTime = this.time.now;
+            const timeLeft = Math.max(0, (this.ICE_COOLDOWN - (currentTime - this.lastIceShot)) / 1000);
+            if (timeLeft > 0) {
+              this.iceCooldownText.setText(`❄${timeLeft.toFixed(1)}`);
+            } else {
+              this.iceCooldownText.setText('');
+            }
+            this.iceCooldownText.x = this.player.x;
+            this.iceCooldownText.y = this.player.y - 50;
+          }
+
+          // Clean up offscreen ice chunks
+          if (this.iceProjectiles) {
+            this.iceProjectiles.children.each(ice => {
+              if (ice.x < -50 || ice.x > config.width + 50 ||
+                  ice.y < -50 || ice.y > config.height + 50) {
+                ice.destroy();
+              }
+            });
+          }
+
+          if (this.canFreezeSharks && this.input.keyboard.checkDown(this.input.keyboard.addKey('E'))) {
+            this.freezeSharks();
+          }
+          
+          // Update freeze cooldown text
+          if (this.canFreezeSharks) {
+            const currentTime = this.time.now;
+            const timeLeft = Math.max(0, (this.FREEZE_COOLDOWN - (currentTime - this.lastFreezeTime)) / 1000);
+            if (timeLeft > 0) {
+              this.freezeCooldownText.setText(`❄${timeLeft.toFixed(1)}`);
+            } else {
+              this.freezeCooldownText.setText('');
+            }
+            this.freezeCooldownText.x = this.player.x;
+            this.freezeCooldownText.y = this.player.y - 70;
+          }
+        }
+        
+
+        if (this.canUseShockwave && this.input.keyboard.checkDown(this.input.keyboard.addKey('W'))) {
+          this.createShockwave.call(this);
+        }
+        if (this.canDash && !this.isDashing && 
+            this.input.keyboard.checkDown(this.input.keyboard.addKey('W'))) {
+          this.performDash();
+        }
+
+        // Update dash cooldown text
+        if (this.canDash) {
+          const currentTime = this.time.now;
+          const timeLeft = Math.max(0, (this.DASH_COOLDOWN - (currentTime - this.lastDashTime)) / 1000);
+          if (timeLeft > 0) {
+            this.dashCooldownText.setText(`→${timeLeft.toFixed(1)}`);
+          } else {
+            this.dashCooldownText.setText('');
+          }
+          this.dashCooldownText.x = this.player.x;
+          this.dashCooldownText.y = this.player.y - 50;
+        }
+
+        // Only check for dash collision if dashing
+        if (this.isDashing) {
+          this.physics.overlap(this.player, this.sharks, this.handleDashCollision, null, this);
+        }
+
+        if (this.canShootBubbles) {
+          const currentTime = this.time.now;
+          const timeLeft = Math.max(0, (BUBBLE_COOLDOWN - (currentTime - this.lastBubbleShot)) / 1000);
+          if (timeLeft > 0) {
+              this.bubbleCooldownText.setText(`<${timeLeft.toFixed(1)}>`);
+          } else {
+              this.bubbleCooldownText.setText('');
+          }
+          this.bubbleCooldownText.x = this.player.x;
+          this.bubbleCooldownText.y = this.player.y - 50; // Position above shield countdown
+        }
+
+        if (this.canUseShockwave) {
+          const shockwaveTimeLeft = Math.max(0, (SHOCKWAVE_COOLDOWN - (this.time.now - this.lastShockwaveTime)) / 1000);
+          if (shockwaveTimeLeft > 0) {
+            this.shockwaveCountdownText.setText(`{${shockwaveTimeLeft.toFixed(1)}}`);
+          } else {
+            this.shockwaveCountdownText.setText('');
+          }
+          this.shockwaveCountdownText.x = this.player.x;
+          this.shockwaveCountdownText.y = this.player.y - 70;
+        }
+
+        // Clean up offscreen bubbles
+        this.bubbleProjectiles.children.each(bubble => {
+            if (bubble.x < -50 || bubble.x > config.width + 50 ||
+                bubble.y < -50 || bubble.y > config.height + 50) {
+                bubble.destroy();
+            }
+        });
+      }
+
+    }
+
+    const config = {
+      type: Phaser.AUTO,
+      width: 1400,
+      height: 800,
+      physics: {
+        default: 'arcade',
+        arcade: {
+          gravity: { y: 0 },
+          debug: DEBUG_MODE,
+        },
+      },
+      // Just list the scenes in an array, with TitleScreen first
+      scene: [TitleScreen, CharacterSelect, MainGame],
+      scale: {
+        mode: Phaser.Scale.FIT,
+        parent: 'body',
+        autoCenter: Phaser.Scale.CENTER_BOTH
+      },
+    };
+
+    const game = new Phaser.Game(config);
+  </script>
+</body>
+</html>
