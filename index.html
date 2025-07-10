@@ -133,7 +133,7 @@
             jingle.play();
             jinglePlayed = true;
           }
-          this.scene.start('CharacterSelect');
+          this.scene.start('LevelSelect', { character: 'toddle' });
         });
         
         // Also handle space key
@@ -142,7 +142,7 @@
             jingle.play();
             jinglePlayed = true;
           }
-          this.scene.start('CharacterSelect');
+          this.scene.start('LevelSelect', { character: 'toddle' });
         });
       }
     }
@@ -156,12 +156,12 @@
         // Load character images for selection screen
         this.load.image('toddle_1', 'toddle_1.png');
         this.load.image('pippin_1', 'pippin_1.png');
-        this.load.image('reef', 'reef.png');
+        this.load.image('character_select_bg', 'character_select_bg.png');
       }
       
       create() {
         // Add background
-        this.add.image(this.cameras.main.centerX, this.cameras.main.centerY, 'reef');
+        this.add.image(this.cameras.main.centerX, this.cameras.main.centerY, 'character_select_bg');
         
         // Add title text
         this.add.text(this.cameras.main.centerX, 150, 'Choose Your Character', {
@@ -217,11 +217,11 @@
         
         // Add selection handlers
         toddleContainer.on('pointerdown', () => {
-          this.scene.start('MainGame', { character: 'toddle' });
+          this.scene.start('LevelSelect', { character: 'toddle' });
         });
         
         pippinContainer.on('pointerdown', () => {
-          this.scene.start('MainGame', { character: 'pippin' });
+          this.scene.start('LevelSelect', { character: 'pippin' });
         });
         
         // Add disclaimer text
@@ -244,6 +244,175 @@
           backgroundColor: '#00000080',
           padding: { x: 10, y: 5 },
         });
+      }
+    }
+
+    class LevelSelect extends Phaser.Scene {
+      constructor() {
+        super('LevelSelect');
+      }
+
+      init(data) {
+        this.selectedCharacter = data.character || 'toddle';
+      }
+
+      preload() {
+        // Level icons
+        this.load.image('level1_icon', 'turtle_reef_icon.png');
+        this.load.image('level2_icon', 'shark_cove_icon.png');
+        this.load.image('level3_icon', 'kings_lair_icon.png');
+        
+        // Level backgrounds for preview
+        this.load.image('shark_cove_bg', 'shark_cove_bg.png');
+        this.load.image('kings_lair_bg', 'kings_lair_bg.png');
+      }
+
+      create() {
+        // Background
+        this.add.rectangle(0, 0, 800, 800, 0x004466).setOrigin(0);
+        
+        // Title
+        this.add.text(this.cameras.main.centerX, 80, 'SELECT LEVEL', {
+          fontSize: '48px',
+          fill: '#ffffff',
+          fontStyle: 'bold',
+          strokeThickness: 6,
+          stroke: '#000000'
+        }).setOrigin(0.5);
+        
+        // Get current level progress
+        const unlockedLevel = this.getUnlockedLevel();
+        
+        // Level data
+        const levels = [
+          { id: 1, name: 'Turtle Reef', icon: 'level1_icon', bg: 'reef' },
+          { id: 2, name: 'Shark Cove', icon: 'level2_icon', bg: 'shark_cove_bg' },
+          { id: 3, name: "King's Lair", icon: 'level3_icon', bg: 'kings_lair_bg' }
+        ];
+        
+        // Create level buttons in a horizontal row
+        const centerY = 400;
+        const totalWidth = 600; // Total width for all 3 icons
+        const iconSize = 120; // Smaller icon size
+        const spacing = totalWidth / (levels.length - 1); // Space between icons
+        const startX = this.cameras.main.centerX - totalWidth / 2;
+        
+        levels.forEach((level, index) => {
+          const x = startX + (index * spacing);
+          const isUnlocked = level.id <= unlockedLevel;
+          
+          // Level icon container
+          const iconContainer = this.add.container(x, centerY);
+          
+          // Icon background
+          const iconBg = this.add.rectangle(0, 0, iconSize, iconSize, isUnlocked ? 0x00ff00 : 0x333333);
+          iconBg.setStrokeStyle(3, isUnlocked ? 0xffffff : 0x666666);
+          
+          // Level icon (placeholder rectangle if image not loaded)
+          let icon;
+          if (this.textures.exists(level.icon)) {
+            icon = this.add.image(0, 0, level.icon);
+            // Scale icon to fit within the background
+            const scale = (iconSize * 0.8) / Math.max(icon.width, icon.height);
+            icon.setScale(scale);
+          } else {
+            // Placeholder icon
+            icon = this.add.text(0, 0, level.id.toString(), {
+              fontSize: '48px',
+              fill: '#ffffff',
+              fontStyle: 'bold'
+            });
+            icon.setOrigin(0.5);
+          }
+          
+          // Apply grayscale effect if locked
+          if (!isUnlocked) {
+            icon.setTint(0x333333);
+          }
+          
+          // Level name
+          const nameText = this.add.text(0, iconSize/2 + 15, level.name, {
+            fontSize: '20px',
+            fill: isUnlocked ? '#ffffff' : '#666666',
+            fontStyle: 'bold'
+          });
+          nameText.setOrigin(0.5);
+          
+          // Status text
+          let statusText = '';
+          if (level.id < unlockedLevel) {
+            statusText = 'COMPLETED';
+          } else if (level.id === unlockedLevel) {
+            statusText = 'PLAY';
+          } else {
+            statusText = 'LOCKED';
+          }
+          
+          const status = this.add.text(0, -iconSize/2 - 15, statusText, {
+            fontSize: '18px',
+            fill: isUnlocked ? '#00ff00' : '#ff0000',
+            fontStyle: 'bold'
+          });
+          status.setOrigin(0.5);
+          
+          iconContainer.add([iconBg, icon, nameText, status]);
+          
+          // Make clickable if unlocked
+          if (isUnlocked) {
+            iconBg.setInteractive({ useHandCursor: true });
+            
+            iconBg.on('pointerover', () => {
+              iconBg.setScale(1.1);
+              const scale = (iconSize * 0.88) / Math.max(icon.width || 100, icon.height || 100);
+              icon.setScale(scale);
+            });
+            
+            iconBg.on('pointerout', () => {
+              iconBg.setScale(1);
+              const scale = (iconSize * 0.8) / Math.max(icon.width || 100, icon.height || 100);
+              icon.setScale(scale);
+            });
+            
+            iconBg.on('pointerdown', () => {
+              this.scene.start('MainGame', { 
+                character: this.selectedCharacter,
+                level: level.id,
+                levelName: level.name,
+                levelBackground: level.bg
+              });
+            });
+          }
+        });
+        
+        // Back button - goes to title screen
+        const backButton = this.add.text(50, 750, '← BACK', {
+          fontSize: '24px',
+          fill: '#ffffff',
+          fontStyle: 'bold'
+        });
+        backButton.setInteractive({ useHandCursor: true });
+        
+        backButton.on('pointerover', () => {
+          backButton.setScale(1.1);
+        });
+        
+        backButton.on('pointerout', () => {
+          backButton.setScale(1);
+        });
+        
+        backButton.on('pointerdown', () => {
+          this.scene.start('TitleScreen');
+        });
+      }
+      
+      getUnlockedLevel() {
+        // Get from localStorage, default to level 1
+        const saved = localStorage.getItem('turtleDashProgress');
+        if (saved) {
+          const progress = JSON.parse(saved);
+          return progress.unlockedLevel || 1;
+        }
+        return 1;
       }
     }
 
@@ -324,11 +493,21 @@
       }
 
       init(data) {
-        this.selectedCharacter = data.character;
+        this.selectedCharacter = data.character || 'toddle';
+        this.currentLevel = data.level || 1;
+        this.levelName = data.levelName || 'Turtle Reef';
+        this.levelBackground = data.levelBackground || 'reef';
       }
 
       preload() {
-        this.load.image('reef', 'reef.png');
+        // Load level-specific background with unique key
+        const bgKey = 'bg_' + this.levelBackground;
+        if (this.levelBackground === 'reef') {
+          this.load.image(bgKey, 'turtle_reef_bg.png');
+        } else {
+          this.load.image(bgKey, this.levelBackground + '.png');
+        }
+        this.backgroundKey = bgKey;
         // Load character evolution sprites based on selection
         if (this.selectedCharacter === 'toddle') {
           this.load.image('player_1', 'toddle_1.png');
@@ -599,8 +778,266 @@
         }
       }
 
+      createBossShark() {
+        // Create the Shark King
+        const bossShark = this.physics.add.sprite(
+          this.cameras.main.centerX,
+          this.cameras.main.centerY - 200,
+          'shark'
+        );
+        
+        // Make the boss larger
+        bossShark.setScale(2.5);
+        bossShark.setTint(0xff6666); // Reddish tint
+        
+        // Boss properties
+        bossShark.isBoss = true;
+        bossShark.health = 10; // Takes 10 hits to defeat
+        bossShark.hitTimer = 0;
+        bossShark.phase = 1; // Boss has multiple phases
+        
+        // Add to sharks group
+        this.sharks.add(bossShark);
+        
+        // Boss movement pattern - both horizontal and vertical
+        bossShark.setVelocity(150, 100);
+        bossShark.setCollideWorldBounds(true);
+        bossShark.setBounce(1);
+        
+        // Set up shark spawning timer (start at -15000 so first spawn happens after 5 seconds)
+        bossShark.lastSpawnTime = -15000;
+        
+        // Set physics body circle offset (same as regular sharks)
+        const radius = bossShark.width / 4;
+        const offsetY = bossShark.height / 4;
+        bossShark.body.setCircle(radius, 0, offsetY);
+        
+        bossShark.circleOffset = {
+          radius: radius,
+          offsetY: offsetY
+        };
+        
+        // Create boss health bar
+        this.createBossHealthBar();
+        
+        // Boss name text
+        this.bossNameText = this.add.text(
+          this.cameras.main.centerX,
+          50,
+          'SHARK KING',
+          {
+            fontSize: '36px',
+            fill: '#ff0000',
+            fontStyle: 'bold',
+            strokeThickness: 4,
+            stroke: '#000000'
+          }
+        );
+        this.bossNameText.setOrigin(0.5);
+        
+        this.bossShark = bossShark;
+      }
+      
+      createBossHealthBar() {
+        const barWidth = 400;
+        const barHeight = 30;
+        const x = this.cameras.main.centerX - barWidth / 2;
+        const y = 80;
+        
+        // Background bar
+        this.bossHealthBarBg = this.add.rectangle(x, y, barWidth, barHeight, 0x333333);
+        this.bossHealthBarBg.setOrigin(0);
+        this.bossHealthBarBg.setStrokeStyle(2, 0xffffff);
+        
+        // Health bar
+        this.bossHealthBar = this.add.rectangle(x, y, barWidth, barHeight, 0xff0000);
+        this.bossHealthBar.setOrigin(0);
+      }
+      
+      updateBossHealthBar() {
+        if (this.bossShark && this.bossHealthBar) {
+          const healthPercent = this.bossShark.health / 10;
+          this.bossHealthBar.setScale(healthPercent, 1);
+        }
+      }
+      
+      damageBossShark(shark) {
+        // Check if boss can be damaged (invulnerability timer)
+        const currentTime = this.time.now;
+        if (currentTime - shark.hitTimer < 500) return; // 0.5 second invulnerability
+        
+        shark.hitTimer = currentTime;
+        shark.health--;
+        
+        // Flash effect
+        this.tweens.add({
+          targets: shark,
+          alpha: 0.5,
+          duration: 100,
+          yoyo: true,
+          repeat: 2,
+          onComplete: () => {
+            shark.alpha = 1;
+          }
+        });
+        
+        // Update health bar
+        this.updateBossHealthBar();
+        
+        // Check if boss is defeated
+        if (shark.health <= 0) {
+          this.defeatBossShark(shark);
+        } else if (shark.health === 5 && shark.phase === 1) {
+          // Enter phase 2 at half health
+          shark.phase = 2;
+          shark.setTint(0xff0000); // Darker red
+          shark.setVelocity(shark.body.velocity.x * 1.5, shark.body.velocity.y * 1.5);
+          this.showMessage("The Shark King is enraged!", '#ff0000', true);
+        }
+      }
+      
+      defeatBossShark(shark) {
+        // Boss defeated!
+        shark.disableBody(true, false);
+        
+        // Death animation
+        this.tweens.add({
+          targets: shark,
+          scale: 0,
+          rotation: Math.PI * 4,
+          alpha: 0,
+          duration: 2000,
+          onComplete: () => {
+            shark.destroy();
+            this.bossShark = null;
+            
+            // Hide boss UI
+            if (this.bossNameText) this.bossNameText.destroy();
+            if (this.bossHealthBar) this.bossHealthBar.destroy();
+            if (this.bossHealthBarBg) this.bossHealthBarBg.destroy();
+            
+            // Spawn victory portal
+            this.spawnVictoryPortal();
+          }
+        });
+        
+        this.showMessage("The Shark King has been defeated!", '#00ff00', true);
+        this.sounds.sharkRunAway.play();
+      }
+      
+      spawnVictoryPortal() {
+        // Create a special victory portal
+        const portal = this.portals.create(
+          this.cameras.main.centerX,
+          this.cameras.main.centerY,
+          'portal'
+        );
+        portal.setScale(2);
+        portal.isVictoryPortal = true;
+        
+        // Add glow effect
+        this.tweens.add({
+          targets: portal,
+          scale: 2.5,
+          alpha: 0.8,
+          duration: 1000,
+          yoyo: true,
+          repeat: -1
+        });
+      }
+      
+      spawnBossMinions(count) {
+        // Spawn regular sharks near the boss
+        for (let i = 0; i < count; i++) {
+          const offsetX = Phaser.Math.Between(-200, 200);
+          const offsetY = Phaser.Math.Between(-100, 100);
+          
+          const shark = this.sharks.create(
+            this.bossShark.x + offsetX,
+            this.bossShark.y + offsetY,
+            'shark'
+          );
+          
+          // Set shark properties
+          const baseSpeed = this.levelConfig.sharkSpeed;
+          shark.setVelocity(
+            Phaser.Math.Between(-baseSpeed, baseSpeed),
+            Phaser.Math.Between(-baseSpeed, baseSpeed)
+          );
+          shark.setCollideWorldBounds(true);
+          shark.setBounce(1);
+          
+          // Set physics body circle
+          const radius = shark.width / 4;
+          const offsetYCircle = shark.height / 4;
+          shark.body.setCircle(radius, 0, offsetYCircle);
+          
+          shark.circleOffset = {
+            radius: radius,
+            offsetY: offsetYCircle
+          };
+          
+          // Flash effect for spawning
+          this.tweens.add({
+            targets: shark,
+            alpha: { from: 0, to: 1 },
+            duration: 500
+          });
+        }
+        
+        // Show message
+        this.showMessage(`The Shark King summons reinforcements!`, '#ff6666', true);
+      }
+
+      unlockNextLevel() {
+        const saved = localStorage.getItem('turtleDashProgress');
+        let progress = saved ? JSON.parse(saved) : { unlockedLevel: 1 };
+        
+        if (this.currentLevel < 3 && progress.unlockedLevel <= this.currentLevel) {
+          progress.unlockedLevel = this.currentLevel + 1;
+          localStorage.setItem('turtleDashProgress', JSON.stringify(progress));
+        }
+      }
+
+      getLevelConfig() {
+        const configs = {
+          1: {
+            name: 'Turtle Reef',
+            initialSharks: 5,
+            sharkSpeed: 100,
+            hasOctopi: false,
+            hasBoss: false,
+            portalSpawnRate: 0.02,
+            objective: "Find the portals to evolve!\nAvoid or defeat sharks!\nReach your final form!"
+          },
+          2: {
+            name: 'Shark Cove',
+            initialSharks: 8,
+            sharkSpeed: 120,
+            hasOctopi: true,
+            hasBoss: false,
+            portalSpawnRate: 0.015,
+            objective: "Navigate the dangerous cove!\nWatch out for octopi!\nFind all portals to advance!"
+          },
+          3: {
+            name: "King's Lair",
+            initialSharks: 3,
+            sharkSpeed: 80,
+            hasOctopi: true,
+            hasBoss: true,
+            portalSpawnRate: 0.01,
+            objective: "Defeat the Shark King!\nSurvive the final challenge!\nClaim your victory!"
+          }
+        };
+        
+        return configs[this.currentLevel] || configs[1];
+      }
+
       create() {
-        this.add.image(this.cameras.main.centerX, this.cameras.main.centerY, 'reef');
+        this.add.image(this.cameras.main.centerX, this.cameras.main.centerY, this.backgroundKey);
+        
+        // Level-specific configurations
+        this.levelConfig = this.getLevelConfig();
         
         // Detect if on mobile/tablet device
         this.isMobile = this.detectMobileDevice();
@@ -611,7 +1048,7 @@
         }
 
         // Create initial message with controls and objective
-        let initialMessage = "Welcome to Coral Reef Adventure!\n\n";
+        let initialMessage = `Welcome to ${this.levelName}!\n\n`;
         initialMessage += "CONTROLS:\n";
         if (this.isMobile) {
           initialMessage += "Use on-screen controls to move\n";
@@ -621,9 +1058,7 @@
         }
         
         initialMessage += "\nOBJECTIVE:\n";
-        initialMessage += "Find the portals to evolve!\n";
-        initialMessage += "Avoid or defeat sharks!\n";
-        initialMessage += "Reach your final form!";
+        initialMessage += this.levelConfig.objective;
 
         this.messages = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY, initialMessage, {
           fontSize: '24px',
@@ -677,7 +1112,13 @@
 
         // Initialize shark group
         this.sharks = this.physics.add.group();
-        this.createSharks(this, INITIAL_SHARKS, 1);
+        this.createSharks(this, this.levelConfig.initialSharks, this.levelConfig.sharkSpeed / INITIAL_SHARK_SPEED);
+
+        // Create boss shark for level 3
+        if (this.levelConfig.hasBoss) {
+          console.log('Creating boss shark for level', this.currentLevel);
+          this.createBossShark();
+        }
 
         this.giantFish = this.physics.add.group({ key: 'fish', repeat: 2, setXY: { x: 300, y: 400, stepX: 200 } });
 
@@ -791,12 +1232,24 @@
 
         // First check if already at max level
         if (this.currentTurtleLevel >= 4) {
-          // Award a coin for winning
-          const newCoinTotal = addCoins(1);
-          const winMessage = this.isMobile ? 
-            "CONGRATULATIONS!\nYou have reached your final form!\nYOU WIN!\n\n+1 Coin!" : 
-            "CONGRATULATIONS!\nYou have reached your final form!\nYOU WIN!\n\n+1 Coin!\n\nPress SPACE to play again";
-          this.showMessage(winMessage, '#00ff00', false);
+          let newCoinTotal;
+          // Check if this is the final level
+          if (this.currentLevel >= 3) {
+            // Final victory - beat all levels!
+            newCoinTotal = addCoins(3); // Award 3 coins for completing the game
+            const winMessage = this.isMobile ? 
+              "ULTIMATE VICTORY!\nYou've conquered all levels!\nTRUE CHAMPION!\n\n+3 Coins!" : 
+              "ULTIMATE VICTORY!\nYou've conquered all levels!\nTRUE CHAMPION!\n\n+3 Coins!\n\nPress SPACE to return to menu";
+            this.showMessage(winMessage, '#ffff00', false);
+          } else {
+            // Level complete - unlock next level
+            this.unlockNextLevel();
+            newCoinTotal = addCoins(1);
+            const winMessage = this.isMobile ? 
+              `LEVEL COMPLETE!\n${this.levelName} conquered!\nNext level unlocked!\n\n+1 Coin!` : 
+              `LEVEL COMPLETE!\n${this.levelName} conquered!\nNext level unlocked!\n\n+1 Coin!\n\nPress SPACE to continue`;
+            this.showMessage(winMessage, '#00ff00', false);
+          }
           
           // Update coin display
           if (this.coinText) {
@@ -845,14 +1298,22 @@
             
             playAgainButton.on('pointerdown', () => {
               this.resetGameState();
-              this.scene.start('CharacterSelect');
+              if (this.currentLevel >= 3) {
+                this.scene.start('TitleScreen');
+              } else {
+                this.scene.start('LevelSelect', { character: this.selectedCharacter });
+              }
             });
           }
           
           // Add restart handler
           this.input.keyboard.once('keydown-SPACE', () => {
             this.resetGameState();
-            this.scene.start('CharacterSelect');
+            if (this.currentLevel >= 3) {
+              this.scene.start('TitleScreen');
+            } else {
+              this.scene.start('LevelSelect', { character: this.selectedCharacter });
+            }
           });
           return;
         }
@@ -908,8 +1369,10 @@
         const totalSharks = INITIAL_SHARKS + (this.currentTurtleLevel - 1) * SHARKS_PER_LEVEL;
         const speedPercentage = Math.round((speedMultiplier - 1) * 100);
 
-        if (this.currentTurtleLevel === 3) {
+        // Create octopi if the level has them (regardless of turtle level)
+        if (this.levelConfig.hasOctopi && !this.octopiCreated) {
           this.createOctopi(this);
+          this.octopiCreated = true;
         }
 
         if (this.currentTurtleLevel >= 3) {
@@ -1036,7 +1499,13 @@
         // Destroy the ice chunk
         ice.destroy();
 
-        // Make shark retreat
+        // Handle boss shark differently
+        if (shark.isBoss) {
+          this.damageBossShark(shark);
+          return;
+        }
+
+        // Make normal shark retreat
         shark.isRetreating = true;
         this.sounds.sharkRunAway.play();
 
@@ -1339,7 +1808,13 @@
         // Destroy the bubble
         bubble.destroy();
 
-        // Make shark retreat (similar to shield collision)
+        // Handle boss shark differently
+        if (shark.isBoss) {
+          this.damageBossShark(shark);
+          return;
+        }
+
+        // Make normal shark retreat
         shark.isRetreating = true;
         this.sounds.sharkRunAway.play();
 
@@ -1476,30 +1951,70 @@
             // Shield break code remains the same...
             this.hasShield = false;
             this.bubbleShield.destroy();
-            shark.isRetreating = true;
-
+            
             this.sounds.bubblePop.play();
-            this.sounds.sharkRunAway.play();
+            
+            // Handle boss shark differently
+            if (shark.isBoss) {
+              // Count shield bash as a hit
+              this.damageBossShark(shark);
+              
+              // Bounce the boss back instead of making it retreat
+              const dx = shark.x - this.player.x;
+              const dy = shark.y - this.player.y;
+              const distance = Math.sqrt(dx * dx + dy * dy);
+              const dirX = dx / distance;
+              const dirY = dy / distance;
+              
+              // Store current velocity for resuming later
+              const originalVelX = shark.body.velocity.x;
+              const originalVelY = shark.body.velocity.y;
+              
+              // Apply bounce-back velocity
+              shark.setVelocity(
+                  dirX * SHARK_RETREAT_SPEED * 0.75, // Slightly slower bounce
+                  dirY * SHARK_RETREAT_SPEED * 0.75
+              );
+              
+              // Resume normal movement after 1 second
+              setTimeout(() => {
+                // Make sure shark stays within bounds
+                const margin = 100;
+                if (shark.x < margin) shark.x = margin;
+                if (shark.x > this.physics.world.bounds.width - margin) shark.x = this.physics.world.bounds.width - margin;
+                if (shark.y < margin) shark.y = margin;
+                if (shark.y > this.physics.world.bounds.height - margin) shark.y = this.physics.world.bounds.height - margin;
+                
+                // Resume original movement pattern
+                shark.setVelocity(originalVelX, originalVelY);
+              }, 1000);
+              
+              this.showMessage("Shield bash! Boss damaged!", '#ffff00', true);
+            } else {
+              // Normal shark behavior - retreat
+              shark.isRetreating = true;
+              this.sounds.sharkRunAway.play();
 
-            // Calculate direction away from this.player
-            const dx = shark.x - this.player.x;
-            const dy = shark.y - this.player.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            const dirX = dx / distance;
-            const dirY = dy / distance;
+              // Calculate direction away from this.player
+              const dx = shark.x - this.player.x;
+              const dy = shark.y - this.player.y;
+              const distance = Math.sqrt(dx * dx + dy * dy);
+              const dirX = dx / distance;
+              const dirY = dy / distance;
 
-            shark.setVelocity(
-                dirX * SHARK_RETREAT_SPEED,
-                dirY * SHARK_RETREAT_SPEED
-            );
+              shark.setVelocity(
+                  dirX * SHARK_RETREAT_SPEED,
+                  dirY * SHARK_RETREAT_SPEED
+              );
 
-            shark.body.setCollideWorldBounds(false);
+              shark.body.setCollideWorldBounds(false);
 
-            setTimeout(() => {
-                shark.setTexture('shark');
-            }, 200);
+              setTimeout(() => {
+                  shark.setTexture('shark');
+              }, 200);
 
-            this.showMessage("Shield broken! Be careful!", '#ffff00', true);
+              this.showMessage("Shield broken! Be careful!", '#ffff00', true);
+            }
             
             // Only start shield respawn if not game over
             if (!this.gameOver) {
@@ -1649,6 +2164,17 @@
           });
         }
 
+        // Boss shark spawning logic for level 3
+        if (this.bossShark && !this.bossShark.isDead) {
+          const currentTime = this.time.now;
+          
+          // Spawn 2 sharks every 20 seconds
+          if (currentTime - this.bossShark.lastSpawnTime > 20000) {
+            this.spawnBossMinions(2);
+            this.bossShark.lastSpawnTime = currentTime;
+          }
+        }
+
         // Handle bubble shooting
         if (this.canShootBubbles && this.input.keyboard.checkDown(this.input.keyboard.addKey('Q'))) {
           this.shootBubbles.call(this);
@@ -1773,7 +2299,7 @@
         },
       },
       // Just list the scenes in an array, with TitleScreen first
-      scene: [TitleScreen, CharacterSelect, MainGame],
+      scene: [TitleScreen, LevelSelect, MainGame],
       scale: {
         mode: Phaser.Scale.FIT,
         parent: 'body',
