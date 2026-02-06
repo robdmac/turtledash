@@ -41,6 +41,12 @@
     const OCTOPUS_COUNT = 3;
     const INK_SPLAT_DURATION = 3000;
     const INK_SPLAT_SCALE = 2;
+    
+    // Flappy Bird style movement constants
+    const GRAVITY = 250; // How fast the player sinks (reduced for smoother gameplay)
+    const FLAP_VELOCITY = -220; // Upward velocity when flapping (adjusted for better control)
+    const MAX_FALL_SPEED = 350; // Terminal velocity when sinking (slightly reduced)
+    const HORIZONTAL_SPEED = 180; // Speed when moving left/right (increased for better maneuverability)
 
     function launchConfetti(duration = 5000) {
           const end = Date.now() + duration;
@@ -91,10 +97,10 @@
         this.load.image('title_screen', 'title_screen.png');
         
         // Load jingle audio files
-        this.load.audio('jingle_1', 'jingle_1.mp3');
-        this.load.audio('jingle_2', 'jingle_2.mp3');
-        this.load.audio('jingle_3', 'jingle_3.mp3');
-        this.load.audio('jingle_4', 'jingle_4.mp3');
+        this.load.audio('jingle_1', 'jingle_1.ogg');
+        this.load.audio('jingle_2', 'jingle_2.ogg');
+        this.load.audio('jingle_3', 'jingle_3.ogg');
+        this.load.audio('jingle_4', 'jingle_4.ogg');
       }
       
       create() {
@@ -156,6 +162,7 @@
         // Load character images for selection screen
         this.load.image('toddle_1', 'toddle_1.png');
         this.load.image('pippin_1', 'pippin_1.png');
+        this.load.image('opa_1', 'opa_1.png');
         this.load.image('character_select_bg', 'character_select_bg.png');
       }
       
@@ -261,10 +268,14 @@
         this.load.image('level1_icon', 'turtle_reef_icon.png');
         this.load.image('level2_icon', 'shark_cove_icon.png');
         this.load.image('level3_icon', 'kings_lair_icon.png');
+        this.load.image('level4_icon', 'arctic_currents_icon.png');
+        this.load.image('level5_icon', 'glacial_graveyard_icon.png');
         
         // Level backgrounds for preview
         this.load.image('shark_cove_bg', 'shark_cove_bg.png');
         this.load.image('kings_lair_bg', 'kings_lair_bg.png');
+        this.load.image('arctic_currents_bg', 'arctic_currents_bg.png');
+        this.load.image('glacial_graveyard_bg', 'glacial_graveyard_bg.png');
       }
 
       create() {
@@ -287,7 +298,9 @@
         const levels = [
           { id: 1, name: 'Turtle Reef', icon: 'level1_icon', bg: 'reef' },
           { id: 2, name: 'Shark Cove', icon: 'level2_icon', bg: 'shark_cove_bg' },
-          { id: 3, name: "King's Lair", icon: 'level3_icon', bg: 'kings_lair_bg' }
+          { id: 3, name: "King's Lair", icon: 'level3_icon', bg: 'kings_lair_bg' },
+          { id: 4, name: 'Arctic Currents', icon: 'level4_icon', bg: 'arctic_currents_bg' },
+          { id: 5, name: 'Glacial Graveyard', icon: 'level5_icon', bg: 'glacial_graveyard_bg' }
         ];
         
         // Create level buttons in a horizontal row
@@ -374,8 +387,11 @@
             });
             
             iconBg.on('pointerdown', () => {
+              // Force Pippin for Arctic Currents (level 4)
+              const characterToUse = level.id === 4 ? 'pippin' : this.selectedCharacter;
+              
               this.scene.start('MainGame', { 
-                character: this.selectedCharacter,
+                character: characterToUse,
                 level: level.id,
                 levelName: level.name,
                 levelBackground: level.bg
@@ -424,6 +440,7 @@
         this.player = null;
         this.cursors = null;
         this.sharks = null;
+        this.walruses = null;
         this.octopi = null;
         this.giantFish = null;
         this.portal = null;
@@ -525,6 +542,8 @@
         }
         this.load.image('shark', 'shark.png');
         this.load.image('shark_attack', 'shark_attack.png');
+        this.load.image('walrus', 'walrus.png');
+        this.load.image('walrus_frozen', 'walrus_frozen.png');
         this.load.image('fish', 'giant_fish.png');
         this.load.image('this.portal', 'portal.png');
         this.load.image('bubble', 'bubble.png');
@@ -533,19 +552,19 @@
         this.load.image('ink_splat', 'ink_splat.png');
 
         // Load all sound effects
-        this.load.audio('portal', 'portal.mp3');
-        this.load.audio('shark_attack', 'shark_attack.mp3');
-        this.load.audio('ice_shoot', 'ice_shoot.mp3');
-        this.load.audio('dash', 'dash.mp3');
-        this.load.audio('bubble_pop', 'bubble_pop.mp3');
-        this.load.audio('shield_up', 'shield_up.mp3');
-        this.load.audio('shockwave', 'shockwave.mp3');
-        this.load.audio('freeze', 'freeze.mp3');
-        this.load.audio('bubble_shoot', 'bubble_shoot.mp3');
-        this.load.audio('underwater_background', 'underwater_background_audio.mp3');
-        this.load.audio('shark_runaway', 'shark_runaway.mp3');
-        this.load.audio('octopus_ink', 'octopus_ink.mp3');
-        this.load.audio('win_game', 'win_game.mp3');
+        this.load.audio('portal', 'portal.ogg');
+        this.load.audio('shark_attack', 'shark_attack.ogg');
+        this.load.audio('ice_shoot', 'ice_shoot.ogg');
+        this.load.audio('dash', 'dash.ogg');
+        this.load.audio('bubble_pop', 'bubble_pop.ogg');
+        this.load.audio('shield_up', 'shield_up.ogg');
+        this.load.audio('shockwave', 'shockwave.ogg');
+        this.load.audio('freeze', 'freeze.ogg');
+        this.load.audio('bubble_shoot', 'bubble_shoot.ogg');
+        this.load.audio('underwater_background', 'underwater_background_audio.ogg');
+        this.load.audio('shark_runaway', 'shark_runaway.ogg');
+        this.load.audio('octopus_ink', 'octopus_ink.ogg');
+        this.load.audio('win_game', 'win_game.ogg');
       }
 
       // Add bubble creation function
@@ -778,6 +797,59 @@
         }
       }
 
+      createWalruses(scene, count, speedMultiplier = 1) {
+        for (let i = 0; i < count; i++) {
+          let x, y;
+          let attempts = 0;
+          const maxAttempts = 50;
+          
+          do {
+            x = Phaser.Math.Between(100, 1400);
+            y = Phaser.Math.Between(100, 800);
+            attempts++;
+            
+            const distanceFromPlayer = Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y);
+            const distanceFromPortal = Phaser.Math.Distance.Between(x, y, this.portal.x, this.portal.y);
+            
+            if (distanceFromPlayer >= 300 && distanceFromPortal >= 200) {
+              break;
+            }
+          } while (attempts < maxAttempts);
+
+          const walrus = this.walruses.create(x, y, 'walrus');
+          
+          // Walrus behavior - slower but more deliberate movement
+          const walrusSpeed = INITIAL_SHARK_SPEED * speedMultiplier * 0.6; // Walruses are slower
+          walrus.setScale(0.1); // Walruses are bigger
+          
+          // Walruses move in more horizontal patterns (they slide on ice)
+          walrus.setVelocity(
+            Phaser.Math.Between(-walrusSpeed * 1.5, walrusSpeed * 1.5), // More horizontal movement
+            Phaser.Math.Between(-walrusSpeed * 0.5, walrusSpeed * 0.5)  // Less vertical movement
+          );
+          
+          // Add walrus-specific properties
+          walrus.chargeTimer = 0;
+          walrus.isCharging = false;
+          walrus.lastChargeTime = 0;
+          walrus.CHARGE_COOLDOWN = 4000; // Charge every 4 seconds
+          walrus.CHARGE_SPEED = 300;
+          walrus.CHARGE_DURATION = 1000;
+          
+          walrus.setCollideWorldBounds(true);
+          walrus.setBounce(0.5); // Less bouncy than sharks
+
+          const radius = walrus.width / 3; // Bigger collision area
+          const offsetY = walrus.height / 4;
+          walrus.body.setCircle(radius, 0, offsetY);
+          
+          walrus.circleOffset = {
+            radius: radius,
+            offsetY: offsetY
+          };
+        }
+      }
+
       createBossShark() {
         // Create the Shark King
         const bossShark = this.physics.add.sprite(
@@ -993,7 +1065,7 @@
         const saved = localStorage.getItem('turtleDashProgress');
         let progress = saved ? JSON.parse(saved) : { unlockedLevel: 1 };
         
-        if (this.currentLevel < 3 && progress.unlockedLevel <= this.currentLevel) {
+        if (this.currentLevel < 4 && progress.unlockedLevel <= this.currentLevel) {
           progress.unlockedLevel = this.currentLevel + 1;
           localStorage.setItem('turtleDashProgress', JSON.stringify(progress));
         }
@@ -1027,6 +1099,24 @@
             hasBoss: true,
             portalSpawnRate: 0.01,
             objective: "Defeat the Shark King!\nSurvive the final challenge!\nClaim your victory!"
+          },
+          4: {
+            name: 'Arctic Currents',
+            initialSharks: 10,
+            sharkSpeed: 140,
+            hasOctopi: false,
+            hasBoss: false,
+            portalSpawnRate: 0.01,
+            objective: "Navigate the icy waters!\nMaster the currents!\nComplete your arctic journey!"
+          },
+          5: {
+            name: 'Glacial Graveyard',
+            initialSharks: 12,
+            sharkSpeed: 160,
+            hasOctopi: false,
+            hasBoss: false,
+            portalSpawnRate: 0.01,
+            objective: "Survive the frozen graveyard!\nAvoid the icy walruses!\nReach the final portal!"
           }
         };
         
@@ -1092,11 +1182,15 @@
           winGame: this.sound.add('win_game')
         };
 
-        // Create this.player with current evolution level
-        this.player = this.physics.add.sprite(100, 100, `player_${this.currentTurtleLevel}`);
+        // Create this.player with current evolution level (start higher due to gravity)
+        this.player = this.physics.add.sprite(100, 200, `player_${this.currentTurtleLevel}`);
         this.player.setCollideWorldBounds(true);
         this.player.setScale(0.2);
         this.player.setFlipX(false);
+        
+        // Set gravity for flappy bird style movement
+        this.player.body.setGravityY(GRAVITY);
+        this.player.body.setMaxVelocity(1000, MAX_FALL_SPEED);
 
         // Create this.portal in first corner
         this.portal = this.physics.add.sprite(this.portalPositions[this.currentPortalIndex].x, 
@@ -1110,9 +1204,16 @@
 
         this.bubbleProjectiles = this.physics.add.group();
 
-        // Initialize shark group
+        // Initialize enemy groups
         this.sharks = this.physics.add.group();
-        this.createSharks(this, this.levelConfig.initialSharks, this.levelConfig.sharkSpeed / INITIAL_SHARK_SPEED);
+        this.walruses = this.physics.add.group();
+        
+        // Create appropriate enemies for the level
+        if (this.currentLevel === 4 || this.currentLevel === 5) {
+          this.createWalruses(this, this.levelConfig.initialSharks, this.levelConfig.sharkSpeed / INITIAL_SHARK_SPEED);
+        } else {
+          this.createSharks(this, this.levelConfig.initialSharks, this.levelConfig.sharkSpeed / INITIAL_SHARK_SPEED);
+        }
 
         // Create boss shark for level 3
         if (this.levelConfig.hasBoss) {
@@ -1138,10 +1239,12 @@
         this.cursors = this.input.keyboard.createCursorKeys();
 
         this.physics.add.overlap(this.player, this.sharks, this.gameOverHandler, null, this);
+        this.physics.add.overlap(this.player, this.walruses, this.handleWalrusCollision, null, this);
         // this.physics.add.overlap(this.player, this.giantFish, () => this.showMessage("Avoid the giant fish!", null, true), null, this);
         this.physics.add.overlap(this.player, this.portal, this.handlePortalContact, null, this);
 
         this.physics.add.overlap(this.bubbleProjectiles, this.sharks, this.handleBubbleSharkCollision, null, this);
+        this.physics.add.overlap(this.bubbleProjectiles, this.walruses, this.handleBubbleWalrusCollision, null, this);
 
         this.octopi = this.physics.add.group();
         this.physics.add.overlap(this.player, this.octopi, (player, octopus) => { this.createInkSplat(); }, null, this);
@@ -1149,6 +1252,7 @@
         if (this.selectedCharacter === 'pippin') {
           this.iceProjectiles = this.physics.add.group();
           this.physics.add.overlap(this.iceProjectiles, this.sharks, this.handleIceSharkCollision, null, this);
+          this.physics.add.overlap(this.iceProjectiles, this.walruses, this.handleIceWalrusCollision, null, this);
           
           // Add cooldown text for ice shots
           this.iceCooldownText = this.add.text(0, 0, '', {
@@ -1234,7 +1338,7 @@
         if (this.currentTurtleLevel >= 4) {
           let newCoinTotal;
           // Check if this is the final level
-          if (this.currentLevel >= 3) {
+          if (this.currentLevel >= 4) {
             // Final victory - beat all levels!
             newCoinTotal = addCoins(3); // Award 3 coins for completing the game
             const winMessage = this.isMobile ? 
@@ -1298,7 +1402,7 @@
             
             playAgainButton.on('pointerdown', () => {
               this.resetGameState();
-              if (this.currentLevel >= 3) {
+              if (this.currentLevel >= 4) {
                 this.scene.start('TitleScreen');
               } else {
                 this.scene.start('LevelSelect', { character: this.selectedCharacter });
@@ -1309,7 +1413,7 @@
           // Add restart handler
           this.input.keyboard.once('keydown-SPACE', () => {
             this.resetGameState();
-            if (this.currentLevel >= 3) {
+            if (this.currentLevel >= 4) {
               this.scene.start('TitleScreen');
             } else {
               this.scene.start('LevelSelect', { character: this.selectedCharacter });
@@ -1346,21 +1450,38 @@
         // Calculate new speed multiplier
         const speedMultiplier = 1 + ((this.currentTurtleLevel - 1) * SPEED_INCREASE_PER_LEVEL / INITIAL_SHARK_SPEED);
         
-        // Add faster sharks
-        this.createSharks(this, SHARKS_PER_LEVEL, speedMultiplier);
-
-        // Update existing sharks' speed
-        this.sharks.children.iterate(shark => {
-          const currentVelX = shark.body.velocity.x;
-          const currentVelY = shark.body.velocity.y;
-          const currentSpeed = Math.sqrt(currentVelX * currentVelX + currentVelY * currentVelY);
-          const direction = {
-            x: currentVelX / currentSpeed,
-            y: currentVelY / currentSpeed
-          };
-          const newSpeed = INITIAL_SHARK_SPEED * speedMultiplier;
-          shark.setVelocity(direction.x * newSpeed, direction.y * newSpeed);
-        });
+        // Add more enemies based on current level
+        if (this.currentLevel === 4 || this.currentLevel === 5) {
+          // Add more walruses
+          this.createWalruses(this, SHARKS_PER_LEVEL-1, speedMultiplier*0.8);
+          
+          // Update existing walruses' speed
+          this.walruses.children.iterate(walrus => {
+            if (!walrus.isStunned && !walrus.isCharging) {
+              const walrusSpeed = INITIAL_SHARK_SPEED * speedMultiplier * 0.6;
+              walrus.setVelocity(
+                Phaser.Math.Between(-walrusSpeed * 1.5, walrusSpeed * 1.5),
+                Phaser.Math.Between(-walrusSpeed * 0.5, walrusSpeed * 0.5)
+              );
+            }
+          });
+        } else {
+          // Add faster sharks
+          this.createSharks(this, SHARKS_PER_LEVEL, speedMultiplier);
+          
+          // Update existing sharks' speed
+          this.sharks.children.iterate(shark => {
+            const currentVelX = shark.body.velocity.x;
+            const currentVelY = shark.body.velocity.y;
+            const currentSpeed = Math.sqrt(currentVelX * currentVelX + currentVelY * currentVelY);
+            const direction = {
+              x: currentVelX / currentSpeed,
+              y: currentVelY / currentSpeed
+            };
+            const newSpeed = INITIAL_SHARK_SPEED * speedMultiplier;
+            shark.setVelocity(direction.x * newSpeed, direction.y * newSpeed);
+          });
+        }
 
         // Move this.portal to next corner
         this.currentPortalIndex = (this.currentPortalIndex + 1) % this.portalPositions.length;
@@ -1605,6 +1726,49 @@
           }
         });
 
+        // Also freeze walruses in Arctic levels (4-5)
+        if ((this.currentLevel === 4 || this.currentLevel === 5) && this.walruses) {
+          this.walruses.children.each(walrus => {
+            if (!walrus.isStunned && !walrus.isRetreating) {
+              // Clear charging state if walrus was charging
+              if (walrus.isCharging) {
+                walrus.isCharging = false;
+                walrus.clearTint();
+              }
+              
+              // Store original velocity
+              walrus.originalVelocity = {
+                x: walrus.body.velocity.x,
+                y: walrus.body.velocity.y
+              };
+              
+              // Stop walrus movement
+              walrus.setVelocity(0, 0);
+              walrus.isStunned = true;
+              
+              // Change texture to walrus_frozen
+              walrus.setTexture('walrus_frozen');
+              
+              // Unfreeze after duration (walruses freeze for longer)
+              this.time.delayedCall(this.FREEZE_DURATION * 1.5, () => {
+                if (walrus && walrus.active) {
+                  walrus.setTexture('walrus');
+                  walrus.isStunned = false;
+                  
+                  // Restore normal movement speed (not charging speed)
+                  const walrusSpeed = this.levelConfig.sharkSpeed * 0.6;
+                  walrus.setVelocity(
+                    Phaser.Math.Between(-walrusSpeed * 1.5, walrusSpeed * 1.5),
+                    Phaser.Math.Between(-walrusSpeed * 0.5, walrusSpeed * 0.5)
+                  );
+                  
+                  delete walrus.originalVelocity;
+                }
+              });
+            }
+          });
+        }
+
         this.lastFreezeTime = currentTime;
       }
 
@@ -1638,6 +1802,7 @@
         // Touch control properties
         this.touchControls = {
           up: false,
+          upJustPressed: false,
           down: false,
           left: false,
           right: false,
@@ -1663,8 +1828,9 @@
         const upButton = this.add.circle(0, -60, buttonSize/2, 0x333333, buttonAlpha);
         const upText = this.add.text(0, -60, '↑', buttonStyle).setOrigin(0.5);
         
-        const downButton = this.add.circle(0, 60, buttonSize/2, 0x333333, buttonAlpha);
-        const downText = this.add.text(0, 60, '↓', buttonStyle).setOrigin(0.5);
+        // Down button removed for flappy bird style controls
+        // const downButton = this.add.circle(0, 60, buttonSize/2, 0x333333, buttonAlpha);
+        // const downText = this.add.text(0, 60, '↓', buttonStyle).setOrigin(0.5);
         
         const leftButton = this.add.circle(-60, 0, buttonSize/2, 0x333333, buttonAlpha);
         const leftText = this.add.text(-60, 0, '←', buttonStyle).setOrigin(0.5);
@@ -1672,21 +1838,32 @@
         const rightButton = this.add.circle(60, 0, buttonSize/2, 0x333333, buttonAlpha);
         const rightText = this.add.text(60, 0, '→', buttonStyle).setOrigin(0.5);
         
-        movementContainer.add([upButton, upText, downButton, downText, leftButton, leftText, rightButton, rightText]);
+        movementContainer.add([upButton, upText, leftButton, leftText, rightButton, rightText]);
         
         // Set high depth to ensure controls appear on top
         movementContainer.setDepth(1000);
         
         // Set up movement button interactions
         upButton.setInteractive();
-        upButton.on('pointerdown', () => { this.touchControls.up = true; upButton.setAlpha(1); });
-        upButton.on('pointerup', () => { this.touchControls.up = false; upButton.setAlpha(buttonAlpha); });
-        upButton.on('pointerout', () => { this.touchControls.up = false; upButton.setAlpha(buttonAlpha); });
+        upButton.on('pointerdown', () => { 
+          this.touchControls.up = true; 
+          this.touchControls.upJustPressed = true;
+          upButton.setAlpha(1); 
+        });
+        upButton.on('pointerup', () => { 
+          this.touchControls.up = false; 
+          upButton.setAlpha(buttonAlpha); 
+        });
+        upButton.on('pointerout', () => { 
+          this.touchControls.up = false; 
+          upButton.setAlpha(buttonAlpha); 
+        });
         
-        downButton.setInteractive();
-        downButton.on('pointerdown', () => { this.touchControls.down = true; downButton.setAlpha(1); });
-        downButton.on('pointerup', () => { this.touchControls.down = false; downButton.setAlpha(buttonAlpha); });
-        downButton.on('pointerout', () => { this.touchControls.down = false; downButton.setAlpha(buttonAlpha); });
+        // Down button handlers removed for flappy bird style controls
+        // downButton.setInteractive();
+        // downButton.on('pointerdown', () => { this.touchControls.down = true; downButton.setAlpha(1); });
+        // downButton.on('pointerup', () => { this.touchControls.down = false; downButton.setAlpha(buttonAlpha); });
+        // downButton.on('pointerout', () => { this.touchControls.down = false; downButton.setAlpha(buttonAlpha); });
         
         leftButton.setInteractive();
         leftButton.on('pointerdown', () => { this.touchControls.left = true; leftButton.setAlpha(1); });
@@ -1837,6 +2014,163 @@
         }, 200);
       }
 
+      handleWalrusCollision(player, walrus) {
+        if (this.gameOver || walrus.isStunned) return;
+        
+        // Check if player is dashing - walruses can be stunned by dash
+        if (this.isDashing) {
+          this.stunWalrus(walrus);
+          return;
+        }
+        
+        // Check if player has shield
+        if (this.hasShield) {
+          this.hasShield = false;
+          this.bubbleShield.destroy();
+          this.sounds.bubblePop.play();
+          
+          // Stun the walrus when hit with shield
+          this.stunWalrus(walrus);
+          this.showMessage("Shield broken! Walrus stunned!", '#ffff00', true);
+          
+          if (!this.gameOver) {
+            this.createBubbleShield.call(this);
+          }
+          return;
+        }
+        
+        // Game over
+        this.gameOver = true;
+        this.sounds.sharkAttack.play();
+        
+        const gameOverMessage = this.isMobile ? 
+          'GAME OVER - Walrus got you!' : 
+          'GAME OVER - Walrus got you!\nPress SPACE to restart';
+        this.showMessage(gameOverMessage, '#ff0000', false);
+        this.physics.pause();
+        
+        // Add restart button for mobile
+        if (this.isMobile) {
+          const restartButton = this.add.rectangle(
+            this.cameras.main.centerX,
+            this.cameras.main.centerY + 80,
+            200,
+            60,
+            0x00ff00
+          );
+          restartButton.setInteractive();
+          
+          const restartText = this.add.text(
+            this.cameras.main.centerX,
+            this.cameras.main.centerY + 80,
+            'RESTART',
+            {
+              fontSize: '28px',
+              fill: '#ffffff',
+              fontStyle: 'bold'
+            }
+          );
+          restartText.setOrigin(0.5);
+          
+          restartButton.on('pointerdown', () => {
+            this.resetGameState();
+            this.scene.restart();
+          });
+        }
+        
+        this.input.keyboard.once('keydown-SPACE', () => {
+          this.resetGameState();
+          this.scene.restart();
+        });
+      }
+
+      stunWalrus(walrus) {
+        walrus.isStunned = true;
+        walrus.setVelocity(0, 0);
+        walrus.setTint(0x6666ff); // Blue tint when stunned
+        
+        // Resume after 2 seconds
+        this.time.delayedCall(2000, () => {
+          if (walrus && walrus.active) {
+            walrus.isStunned = false;
+            walrus.clearTint();
+            
+            // Resume movement
+            const walrusSpeed = this.levelConfig.sharkSpeed * 0.6;
+            walrus.setVelocity(
+              Phaser.Math.Between(-walrusSpeed * 1.5, walrusSpeed * 1.5),
+              Phaser.Math.Between(-walrusSpeed * 0.5, walrusSpeed * 0.5)
+            );
+          }
+        });
+      }
+
+      handleBubbleWalrusCollision(bubble, walrus) {
+        if (walrus.isStunned) return;
+        
+        bubble.destroy();
+        
+        // Walruses are tougher - they get stunned instead of retreating
+        this.stunWalrus(walrus);
+        this.sounds.sharkRunAway.play();
+      }
+
+      handleIceWalrusCollision(ice, walrus) {
+        if (walrus.isRetreating) return;
+
+        // Destroy the ice chunk
+        ice.destroy();
+
+        // Clear charging state if walrus was charging
+        if (walrus.isCharging) {
+          walrus.isCharging = false;
+          walrus.clearTint();
+        }
+
+        // Make walrus retreat
+        walrus.isRetreating = true;
+        this.sounds.sharkRunAway.play();
+
+        // Calculate direction away from collision point
+        const dx = walrus.x - ice.x;
+        const dy = walrus.y - ice.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const dirX = dx / distance;
+        const dirY = dy / distance;
+
+        // Use higher speed for walruses to ensure they clear the screen
+        const retreatSpeed = SHARK_RETREAT_SPEED * 1.5;
+        walrus.setVelocity(
+          dirX * retreatSpeed,
+          dirY * retreatSpeed
+        );
+
+        walrus.body.setCollideWorldBounds(false);
+        
+        // Add minimum velocity to ensure they keep moving
+        const minSpeed = 200;
+        if (Math.abs(walrus.body.velocity.x) < minSpeed && Math.abs(walrus.body.velocity.y) < minSpeed) {
+          // If velocity is too low, boost it
+          walrus.setVelocity(
+            dirX * retreatSpeed * 2,
+            dirY * retreatSpeed * 2
+          );
+        }
+
+        // Failsafe: destroy walrus after 5 seconds if it's still on screen
+        this.time.delayedCall(2000, () => {
+          if (walrus && walrus.active) {
+            walrus.destroy();
+          }
+        });
+
+        setTimeout(() => {
+          if (walrus && walrus.active) {
+            walrus.setTexture('walrus');
+          }
+        }, 200);
+      }
+
       showMessage(text, color = '#ffffff', autoFade = true) {
         this.messages.setText(text);
         this.messages.setStyle({
@@ -1897,6 +2231,9 @@
         }
         if (this.octopi) {
           this.octopi.clear(true, true);
+        }
+        if (this.walruses) {
+          this.walruses.clear(true, true);
         }
         if (this.inkSplat) {
             this.inkSplat.destroy();
@@ -2086,20 +2423,34 @@
       update() {
         if (this.gameOver) return;
 
-        this.player.setVelocity(0);
+        // Flappy bird style movement - only reset X velocity
+        this.player.setVelocityX(0);
 
-        // Check both keyboard and touch controls for movement
+        // Horizontal movement (left/right)
         if (this.cursors.left.isDown || (this.touchControls && this.touchControls.left)) {
-          this.player.setVelocityX(-150);
+          this.player.setVelocityX(-HORIZONTAL_SPEED);
           this.player.setFlipX(false);
         }
         else if (this.cursors.right.isDown || (this.touchControls && this.touchControls.right)) {
-          this.player.setVelocityX(150);
+          this.player.setVelocityX(HORIZONTAL_SPEED);
           this.player.setFlipX(true);
         }
 
-        if (this.cursors.up.isDown || (this.touchControls && this.touchControls.up)) this.player.setVelocityY(-150);
-        else if (this.cursors.down.isDown || (this.touchControls && this.touchControls.down)) this.player.setVelocityY(150);
+        // Flap mechanism - up key makes the character flap/swim upward
+        if (Phaser.Input.Keyboard.JustDown(this.cursors.up) || (this.touchControls && this.touchControls.upJustPressed)) {
+          this.player.setVelocityY(FLAP_VELOCITY);
+          
+          // Add a slight rotation effect when flapping
+          this.player.setAngularVelocity(-100);
+          this.time.delayedCall(200, () => {
+            this.player.setAngularVelocity(0);
+            this.player.setRotation(0);
+          });
+          
+          if (this.touchControls) {
+            this.touchControls.upJustPressed = false; // Reset the flag after using it
+          }
+        }
 
         // Update bubble shield position if it exists
         if (this.bubbleShield && this.hasShield) {
@@ -2173,6 +2524,76 @@
             this.spawnBossMinions(2);
             this.bossShark.lastSpawnTime = currentTime;
           }
+        }
+
+        // Update walrus behavior
+        if (this.walruses) {
+          this.walruses.children.each(walrus => {
+            if (!walrus || !walrus.active) return;
+            
+            // Check if walrus is retreating and off screen
+            if (walrus.isRetreating) {
+              if (walrus.x < -100 || walrus.x > config.width + 100 ||
+                  walrus.y < -100 || walrus.y > config.height + 100) {
+                walrus.destroy();
+              }
+              return; // Skip remaining updates for retreating walruses
+            }
+            
+            if (walrus.isStunned) return;
+            
+            // Walrus charging behavior
+            const currentTime = this.time.now;
+            const distanceToPlayer = Phaser.Math.Distance.Between(
+              walrus.x, walrus.y, 
+              this.player.x, this.player.y
+            );
+            
+            // If close to player and not recently charged, initiate charge
+            if (distanceToPlayer < 200 && !walrus.isCharging && 
+                currentTime - walrus.lastChargeTime > walrus.CHARGE_COOLDOWN) {
+              
+              walrus.isCharging = true;
+              walrus.lastChargeTime = currentTime;
+              
+              // Calculate charge direction
+              const angle = Phaser.Math.Angle.Between(
+                walrus.x, walrus.y,
+                this.player.x, this.player.y
+              );
+              
+              // Charge!
+              walrus.setVelocity(
+                Math.cos(angle) * walrus.CHARGE_SPEED,
+                Math.sin(angle) * walrus.CHARGE_SPEED
+              );
+              
+              // Flash red during charge
+              walrus.setTint(0xff6666);
+              
+              // End charge after duration
+              this.time.delayedCall(walrus.CHARGE_DURATION, () => {
+                if (walrus && walrus.active) {
+                  walrus.isCharging = false;
+                  walrus.clearTint();
+                  
+                  // Resume normal movement
+                  const walrusSpeed = this.levelConfig.sharkSpeed * 0.6;
+                  walrus.setVelocity(
+                    Phaser.Math.Between(-walrusSpeed * 1.5, walrusSpeed * 1.5),
+                    Phaser.Math.Between(-walrusSpeed * 0.5, walrusSpeed * 0.5)
+                  );
+                }
+              });
+            }
+            
+            // Update walrus facing direction
+            if (walrus.body.velocity.x > 0) {
+              walrus.setFlipX(true);
+            } else if (walrus.body.velocity.x < 0) {
+              walrus.setFlipX(false);
+            }
+          });
         }
 
         // Handle bubble shooting
@@ -2288,7 +2709,7 @@
     }
 
     const config = {
-      type: Phaser.AUTO,
+      type: Phaser.CANVAS,
       width: 1400,
       height: 800,
       physics: {
